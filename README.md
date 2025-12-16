@@ -97,6 +97,34 @@ HF_TOKEN=your_huggingface_token_here
 HF_ORG=NLP-07-ODQA
 ```
 
+### 6. 데이터 다운로드 및 폴더 구조 설정
+
+데이터를 다운로드하고 압축을 해제한 후, 다음 폴더 구조로 정리해야 합니다:
+
+```bash
+# 데이터 다운로드 (예시)
+wget <데이터링크>
+
+# 압축 해제
+tar -xzf data.tar.gz
+
+# 폴더 구조 정리
+mkdir -p data/train data/test
+mv data/train.csv data/train/
+mv data/test.csv data/test/
+```
+
+최종 폴더 구조:
+```
+data/
+├── train/
+│   └── train.csv
+└── test/
+    └── test.csv
+```
+
+> **참고**: 프로젝트는 `data/train/train.csv`와 `data/test/test.csv` 경로를 사용합니다.
+
 ## 사용 방법
 
 ### 기본 훈련

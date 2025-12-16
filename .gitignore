@@ -3,13 +3,16 @@ code.tar.gz
 data.tar.gz
 data/*
 data/**/*
+# .gitkeep 파일은 유지
+!data/
+!data/**/
+!data/**/.gitkeep
 
 # Baseline notebook (Git에 포함 금지)
 baseline_code.ipynb
 
 # Data files (루트의 data/ 폴더만 무시, src/data/는 포함)
 *.csv
-/data/
 
 # Model checkpoints and outputs (루트의 models/ 폴더만 무시, src/models/는 포함)
 /models/
@@ -46,3 +49,4 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+outputs_gemma/
