@@ -1,0 +1,48 @@
+.venv/*
+code.tar.gz
+data.tar.gz
+data/*
+data/**/*
+
+# Baseline notebook (Git에 포함 금지)
+baseline_code.ipynb
+
+# Data files
+*.csv
+data/
+
+# Model checkpoints and outputs
+models/
+outputs/
+*.pt
+*.pth
+*.ckpt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Environment variables (민감한 정보)
+.env
+
+# Archives
+*.tar.gz
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
