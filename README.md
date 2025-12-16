@@ -48,12 +48,25 @@ pro-nlp-generationfornlp-nlp-07/
 
 ### 1. 저장소 클론
 
+이 저장소는 Private 저장소이므로 인증이 필요합니다. Personal Access Token을 사용하여 클론하세요.
+
 ```bash
-git clone <repository-url>
+git clone https://<username>:<personal-access-token>@github.com/boostcampaitech8/pro-nlp-generationfornlp-nlp-07.git
 cd pro-nlp-generationfornlp-nlp-07
 ```
 
-### 2. 가상환경 생성 및 활성화
+### 2. Git 사용자 정보 설정
+
+클론 후 로컬 저장소에 사용자 정보를 설정하세요.
+
+```bash
+git config --local user.name "your-username"
+git config --local user.email "your-email@example.com"
+```
+
+> **참고**: `--local` 옵션은 현재 저장소에만 적용됩니다. 모든 저장소에 적용하려면 `--global` 옵션을 사용하세요.
+
+### 3. 가상환경 생성 및 활성화
 
 ```bash
 python3.10 -m venv --system-site-packages .venv
@@ -62,14 +75,14 @@ source .venv/bin/activate  # Linux/Mac
 .venv\Scripts\activate  # Windows
 ```
 
-### 3. 패키지 설치
+### 4. 패키지 설치
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. 환경 변수 설정
+### 5. 환경 변수 설정
 
 `.env.example` 파일을 참고하여 `.env` 파일을 생성하고 Hugging Face 토큰을 설정하세요:
 
