@@ -8,13 +8,7 @@ evaluate==0.4.3
 peft==0.13.2
 requests==2.32.5
 numpy==1.26.4
+rich==14.2.0
 
 # 모듈화하면서 추가된 라이브러리입니다.
 python-dotenv==1.0.0
-huggingface-hub>=0.20.0
-
-# 여기도 추가된건데, 필요할지는 모르겠음. 참고바람.
-torch>=2.0.0
-datasets>=2.14.0
-pandas>=2.0.0
-tqdm>=4.65.0
