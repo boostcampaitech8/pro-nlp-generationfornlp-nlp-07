@@ -133,6 +133,12 @@ data/
 python scripts/train.py
 ```
 
+**자동 기능:**
+- 학습 중 best model이 `outputs/outputs_gemma/best_model/`에 자동 저장됩니다
+- 학습 완료 후 자동으로 Hugging Face에 업로드됩니다 (`.env`의 `HF_TOKEN`과 `config.py`의 `HF_MODEL_NAME` 설정 필요)
+  - Best model → main 브랜치
+  - 각 checkpoint → 별도 브랜치 (예: `checkpoint-2994`, `checkpoint-4491`)
+
 ### 추론
 
 ```bash
@@ -200,13 +206,46 @@ scripts/experiments/memberA/
 - README에 실험 정보, 하이퍼파라미터, 성능 기록 (Macro F1-score)
 - 태그: `korean`, `csat`, `nlp-competition`, `generation-for-nlp`
 
-### 모델 업로드 예시
+### 자동 업로드 기능
+
+`python scripts/train.py` 실행 시 학습 완료 후 자동으로 Hugging Face에 업로드됩니다:
+
+**설정 방법:**
+1. `.env` 파일에 `HF_TOKEN` 설정
+2. `src/config/config.py`에서 `HF_MODEL_NAME` 설정 (예: `"gemma-ko-2b-lora-v1"`)
+
+**업로드 구조:**
+- **Best model** → main 브랜치 (`NLP-07-ODQA/{model-name}`)
+- **각 checkpoint** → 별도 브랜치 (`NLP-07-ODQA/{model-name}/tree/checkpoint-{step}`)
+
+**Best model 선택 기준:**
+- Evaluation loss가 가장 낮은 checkpoint가 자동으로 선택됩니다
+- Best model은 학습 중 `outputs/{output_dir}/best_model/`에 저장됩니다
+- Best model의 원본 checkpoint 정보는 README에 표기됩니다
+
+### 수동 업로드 (선택사항)
+
+자동 업로드를 사용하지 않거나 수동으로 업로드하려면:
+
+```python
+from src.utils.hf_utils import upload_all_checkpoints_to_hf
+from src.config.config import DEFAULT_OUTPUT_DIR, HF_MODEL_NAME, HF_ORG
+
+model_name = f"{HF_ORG}/{HF_MODEL_NAME}"
+upload_all_checkpoints_to_hf(
+    output_dir=str(DEFAULT_OUTPUT_DIR),
+    model_name=model_name,
+    experiment_name=HF_MODEL_NAME,
+)
+```
+
+또는 개별 모델 업로드:
 
 ```python
 from src.utils.hf_utils import upload_model_to_hf
 
 upload_model_to_hf(
-    checkpoint_path="outputs/gemma_ko_2b",
+    checkpoint_path="outputs/outputs_gemma/best_model",
     model_name="NLP-07-ODQA/gemma-ko-2b-lora-v1",
     experiment_name="gemma-ko-2b-lora-v1"
 )

@@ -14,6 +14,8 @@ from src.config.config import (
     RANDOM_SEED,
     MAX_TOKEN_LENGTH,
     TEST_SIZE,
+    HF_MODEL_NAME,
+    HF_ORG,
 )
 from src.data.loader import load_data, flatten_dataset
 from src.data.preprocessor import prepare_training_data
@@ -85,6 +87,28 @@ def main():
     print("Starting training...")
     train(trainer)
     print("Training completed!")
+    
+    # Upload all checkpoints to Hugging Face (if HF_MODEL_NAME is set)
+    if HF_MODEL_NAME:
+        try:
+            from src.utils.hf_utils import upload_all_checkpoints_to_hf
+            
+            model_name = f"{HF_ORG}/{HF_MODEL_NAME}"
+            print(f"\nUploading all checkpoints to Hugging Face: {model_name}")
+            uploaded_urls = upload_all_checkpoints_to_hf(
+                output_dir=str(DEFAULT_OUTPUT_DIR),
+                model_name=model_name,
+                experiment_name=HF_MODEL_NAME,
+            )
+            if uploaded_urls:
+                print(f"\nSuccessfully uploaded {len(uploaded_urls)} checkpoints:")
+                for url in uploaded_urls:
+                    print(f"  - {url}")
+        except Exception as e:
+            print(f"\nWarning: Failed to upload to Hugging Face: {e}")
+            print("Check your HF_TOKEN in .env file and try again.")
+    else:
+        print("\nHF_MODEL_NAME not set. Skipping Hugging Face upload.")
 
 
 if __name__ == "__main__":

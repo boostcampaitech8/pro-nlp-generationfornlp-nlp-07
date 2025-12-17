@@ -7,6 +7,7 @@ from datasets import Dataset
 from peft import LoraConfig
 from src.training.data_collator import get_data_collator
 from src.training.metrics import compute_metrics, preprocess_logits_for_metrics
+from src.training.callbacks import SaveBestModelCallback
 from src.config.config import (
     LEARNING_RATE,
     NUM_TRAIN_EPOCHS,
@@ -119,6 +120,10 @@ def create_trainer(
         save_total_limit=save_total_limit,
         save_only_model=save_only_model,
         report_to=report_to,
+        gradient_checkpointing=True,  # 메모리 절약을 위해 활성화
+        load_best_model_at_end=True,  # 학습 끝에 best model 로드
+        metric_for_best_model="eval_loss",  # eval_loss를 기준으로 best model 선택
+        greater_is_better=False,  # loss는 작을수록 좋음
         **kwargs
     )
     
@@ -129,6 +134,9 @@ def create_trainer(
     # Create preprocess_logits function with tokenizer
     def preprocess_logits_func(logits, labels):
         return preprocess_logits_for_metrics(logits, labels, tokenizer)
+    
+    # Create best model directory path
+    best_model_dir = str(Path(output_dir) / "best_model")
     
     # Create trainer
     trainer = SFTTrainer(
@@ -141,6 +149,7 @@ def create_trainer(
         preprocess_logits_for_metrics=preprocess_logits_func,
         peft_config=peft_config,
         args=sft_config,
+        callbacks=[SaveBestModelCallback(best_model_dir=best_model_dir)],  # Best model 저장 callback 추가
     )
     
     return trainer

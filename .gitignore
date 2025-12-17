@@ -16,7 +16,12 @@ baseline_code.ipynb
 
 # Model checkpoints and outputs (루트의 models/ 폴더만 무시, src/models/는 포함)
 /models/
-outputs/
+outputs/*
+outputs/**/*
+# .gitkeep 파일은 유지
+!outputs/
+!outputs/**/
+!outputs/**/.gitkeep
 *.pt
 *.pth
 *.ckpt

@@ -22,6 +22,8 @@ TEST_DATA_PATH = DATA_DIR / "test" / "test.csv"
 # Model settings
 DEFAULT_MODEL_NAME = "beomi/gemma-ko-2b"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "outputs_gemma"
+# Hugging Face model name for upload (None이면 업로드하지 않음)
+HF_MODEL_NAME = "gemma-ko-2b-lora-v1"  # NLP-07-ODQA/{HF_MODEL_NAME} 형식으로 업로드
 
 # Training hyperparameters
 LEARNING_RATE = 2e-5

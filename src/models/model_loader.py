@@ -11,7 +11,7 @@ def load_model(
     model_name: str,
     torch_dtype: Optional[torch.dtype] = torch.float16,
     trust_remote_code: bool = True,
-    device_map: Optional[Union[str, dict]] = None,
+    device_map: Optional[Union[str, dict]] = "auto",
     **kwargs
 ):
     """
