@@ -5,7 +5,7 @@ from trl import SFTTrainer, SFTConfig
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from datasets import Dataset
 from peft import LoraConfig
-from src.training.data_collator import get_data_collator
+# from src.training.data_collator import get_data_collator  # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
 from src.training.metrics import compute_metrics, preprocess_logits_for_metrics
 from src.training.callbacks import SaveBestModelCallback
 from src.config.config import (
@@ -100,7 +100,7 @@ def create_trainer(
     tokenizer.padding_side = 'right'
     
     # Create data collator
-    data_collator = get_data_collator(tokenizer, response_template)
+    # data_collator = get_data_collator(tokenizer, response_template)  # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
     
     # Create training config
     sft_config = SFTConfig(
@@ -124,6 +124,7 @@ def create_trainer(
         load_best_model_at_end=True,  # 학습 끝에 best model 로드
         metric_for_best_model="eval_loss",  # eval_loss를 기준으로 best model 선택
         greater_is_better=False,  # loss는 작을수록 좋음
+        completion_only_loss=True, # trl>0.20.0 버전은 해당 구문이 data_collator 대신 사용됩니다.
         **kwargs
     )
     
@@ -143,7 +144,7 @@ def create_trainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=data_collator,
+        # data_collator=data_collator, # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
         tokenizer=tokenizer,
         compute_metrics=compute_metrics_func,
         preprocess_logits_for_metrics=preprocess_logits_func,

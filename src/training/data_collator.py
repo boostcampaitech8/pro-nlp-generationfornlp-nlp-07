@@ -11,6 +11,10 @@ def get_data_collator(
 ) -> DataCollatorForCompletionOnlyLM:
     """
     Get data collator for completion-only language modeling
+
+    ** 해당 모듈은 trl>0.20.0 버전에서 deprecated되었습니다. **
+    trl>0.20.0을 사용하는 경우 해당 모듈을 import 해제하고,
+    SFTConfig에 completion_only_loss=True로 설정하세요.
     
     Args:
         tokenizer: Tokenizer to use
