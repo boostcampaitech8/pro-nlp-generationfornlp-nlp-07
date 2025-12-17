@@ -255,10 +255,20 @@ def main():
         show_progress=True
     )
 
+    # Save Detailed Results to JSON first (for debugging/ensemble)
+    import json
+    detailed_json_path = project_root / "submissions" / f"{EXPERIMENT_NAME}_detailed.json"
+    print(f"Saving detailed results to: {detailed_json_path}")
+    with open(detailed_json_path, "w", encoding="utf-8") as f:
+        json.dump(predictions, f, indent=4, ensure_ascii=False)
+    
+    # Filter only ID and Answer for CSV submission
+    submission_data = [{"id": p["id"], "answer": p["answer"]} for p in predictions]
+    
     # Save Submission
-    submission_path = OUTPUT_DIR / f"{EXPERIMENT_NAME}.csv"
+    submission_path = project_root / "submissions" / f"{EXPERIMENT_NAME}.csv"
     print(f"Saving submission to: {submission_path}")
-    create_submission(predictions, str(submission_path))
+    create_submission(submission_data, str(submission_path))
     
     print("\n=== Experiment Completed Successfully ===")
     print(f"Submission available at: {submission_path}")

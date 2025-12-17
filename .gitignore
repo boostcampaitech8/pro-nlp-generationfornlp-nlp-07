@@ -22,6 +22,9 @@ outputs/**/*
 !outputs/
 !outputs/**/
 !outputs/**/.gitkeep
+submissions/*
+submissions/**/*
+!submissions/.gitkeep
 *.pt
 *.pth
 *.ckpt
