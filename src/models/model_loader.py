@@ -9,7 +9,7 @@ from typing import Optional, Union
 
 def load_model(
     model_name: str,
-    torch_dtype: Optional[torch.dtype] = torch.float16,
+    dtype: Optional[torch.dtype] = torch.float16,
     trust_remote_code: bool = True,
     device_map: Optional[Union[str, dict]] = "auto",
     **kwargs
@@ -19,7 +19,7 @@ def load_model(
     
     Args:
         model_name: Model name or path
-        torch_dtype: Torch data type
+        dtype: Torch data type
         trust_remote_code: Whether to trust remote code
         device_map: Device mapping for model
         **kwargs: Additional arguments for from_pretrained
@@ -29,7 +29,7 @@ def load_model(
     """
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         trust_remote_code=trust_remote_code,
         device_map=device_map,
         **kwargs

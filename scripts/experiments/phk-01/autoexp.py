@@ -134,7 +134,7 @@ def main():
         per_device_eval_batch_size=2,
         gradient_accumulation_steps=4, # Simulate larger batch size
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_total_limit=1,
         load_best_model_at_end=True,
     )
