@@ -142,13 +142,27 @@ python scripts/train.py
 ### 추론
 
 ```bash
-python scripts/inference.py --checkpoint <checkpoint_path> --test-data <test_data_path> --output <output_path>
+python scripts/inference.py --checkpoint <checkpoint_path> --test-data <test_data_path>
 ```
 
 또는 최신 체크포인트 사용:
 ```bash
-python scripts/inference.py --output submissions/output.csv
+python scripts/inference.py
 ```
+
+**사용 예시:**
+```bash
+# 특정 checkpoint 사용
+python scripts/inference.py --checkpoint outputs/outputs_gemma/checkpoint-1000
+
+# best_model 사용
+python scripts/inference.py --checkpoint outputs/outputs_gemma/best_model
+```
+
+**Submission 파일 저장 위치:**
+- Checkpoint 이름과 동일한 폴더에 자동으로 저장됩니다
+- 예: `checkpoint-1000` → `submissions/checkpoint-1000/output.csv`
+- 예: `best_model` → `submissions/best_model/output.csv`
 
 ## 팀원별 실험 가이드
 

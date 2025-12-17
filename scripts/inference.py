@@ -32,12 +32,6 @@ def main():
         help="Path to test data CSV file"
     )
     parser.add_argument(
-        "--output",
-        type=str,
-        default="submissions/output.csv",
-        help="Path to output submission file"
-    )
-    parser.add_argument(
         "--device",
         type=str,
         default="cuda",
@@ -53,14 +47,20 @@ def main():
         checkpoints = sorted(output_dir.glob("checkpoint-*"), key=lambda x: int(x.name.split("-")[1]))
         if not checkpoints:
             raise ValueError(f"No checkpoints found in {output_dir}")
-        checkpoint_path = str(checkpoints[-1])
+        checkpoint_path = Path(checkpoints[-1])
         print(f"Using latest checkpoint: {checkpoint_path}")
     else:
-        checkpoint_path = args.checkpoint
+        checkpoint_path = Path(args.checkpoint)
+    
+    # Determine submission path based on checkpoint name
+    checkpoint_name = checkpoint_path.name  # e.g., "checkpoint-1000" or "best_model"
+    submission_dir = project_root / "submissions" / checkpoint_name
+    submission_dir.mkdir(parents=True, exist_ok=True)
+    submission_path = submission_dir / "output.csv"
     
     # Load model and tokenizer
     print(f"Loading checkpoint: {checkpoint_path}")
-    model, tokenizer = load_checkpoint(checkpoint_path, device_map=args.device)
+    model, tokenizer = load_checkpoint(str(checkpoint_path), device_map=args.device)
     
     # Load test data
     print(f"Loading test data: {args.test_data}")
@@ -83,9 +83,9 @@ def main():
     )
     
     # Create submission file
-    print(f"Creating submission file: {args.output}")
-    create_submission(predictions, args.output)
-    print("Inference completed!")
+    print(f"Creating submission file: {submission_path}")
+    create_submission(predictions, str(submission_path))
+    print(f"Inference completed! Submission saved to: {submission_path}")
 
 
 if __name__ == "__main__":
