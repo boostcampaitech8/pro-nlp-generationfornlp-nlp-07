@@ -1,14 +1,21 @@
-ipykernel==6.29.5
-ipywidgets==8.1.5
-transformers==4.40.2
-trl==0.11.4
-scikit-learn==1.5.2
-matplotlib==3.9.2
-evaluate==0.4.3
-peft==0.13.2
+# Core dependencies
+ipykernel==7.1.0
+ipywidgets==8.1.8
+transformers==4.57.3
+torch==2.5.1
+trl==0.26.1
+scikit-learn==1.7.2
+matplotlib==3.10.8
+evaluate==0.4.6
+peft==0.18.0
 requests==2.32.5
-numpy==1.26.4
+numpy==2.2.6
 rich==14.2.0
+python-dotenv==1.2.1
 
-# 모듈화하면서 추가된 라이브러리입니다.
-python-dotenv==1.0.0
+# Additional dependencies
+accelerate==1.12.0
+datasets==4.4.1
+safetensors==0.7.0
+tokenizers==0.22.1
+huggingface-hub==0.36.0
