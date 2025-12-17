@@ -36,8 +36,8 @@ from src.inference.submission import create_submission
 from src.utils.seed import set_seed
 
 # Defaults (can be overridden by CLI args)
-DEFAULT_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507" 
-DEFAULT_EXPERIMENT_NAME = "qwen3-4b-lora-v1"
+DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B" 
+DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v1"
 
 # LoRA Target Modules for Qwen/Llama
 # Common targets: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
@@ -143,6 +143,14 @@ def main():
     print("Starting training...")
     train(trainer)
     print("Training phase completed!")
+    
+    # Save Best Model Explicitly
+    # Since load_best_model_at_end=True, trainer.model is the best model here.
+    best_model_dir = OUTPUT_DIR / "best_model"
+    print(f"Saving best model to: {best_model_dir}")
+    best_model_dir.mkdir(parents=True, exist_ok=True)
+    trainer.save_model(str(best_model_dir))
+    tokenizer.save_pretrained(str(best_model_dir))
     
     # Run Validation explicitly to show metrics
     print("Running final validation...")
