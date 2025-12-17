@@ -7,6 +7,7 @@ It is configured for Qwen/Llama based models.
 
 import sys
 import argparse
+import torch
 from pathlib import Path
 import pandas as pd
 from datasets import Dataset
@@ -58,7 +59,7 @@ def main():
     args = parse_args()
     MODEL_NAME = args.model_name
     EXPERIMENT_NAME = args.experiment_name
-    OUTPUT_DIR = project_root / "outputs" / "T8091"
+    OUTPUT_DIR = project_root / "outputs" / "T8091" / EXPERIMENT_NAME
     
     # 1. Setup
     print(f"Starting Experiment: {EXPERIMENT_NAME}")
@@ -135,7 +136,6 @@ def main():
         gradient_accumulation_steps=4, # Simulate larger batch size
         save_strategy="epoch",
         eval_strategy="epoch",
-        save_total_limit=1,
         load_best_model_at_end=True,
     )
 
@@ -158,9 +158,11 @@ def main():
     print("Validation metrics:", metrics)
 
     # Free up memory (optional but good practice before inference if in same process)
-    # import torch
-    # del model, trainer
-    # torch.cuda.empty_cache()
+    import torch
+    import gc
+    del model, trainer
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # ---------------------------------------------------------
     # Hugging Face Upload Phase
@@ -227,7 +229,11 @@ def main():
     # though technically we could use `trainer.model`. 
     # Sticking to `inference.py` pattern for robustness.
     print(f"Loading checkpoint for inference: {checkpoint_path}")
-    model, tokenizer = load_checkpoint(str(checkpoint_path), device_map="cuda")
+    model, tokenizer = load_checkpoint(
+        str(checkpoint_path), 
+        device_map="cuda",
+        dtype=torch.float16,
+    )
 
     # Load Test Data
     print(f"Loading test data: {TEST_DATA_PATH}")
