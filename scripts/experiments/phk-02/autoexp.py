@@ -39,12 +39,12 @@ from src.utils.seed import set_seed
 
 # Defaults (can be overridden by CLI args)
 DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B" 
-DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v3"
+DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v4"
 
 # LoRA Target Modules for Qwen/Llama
 # Common targets: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
 LORA_TARGET_MODULES = [
-    "q_proj", "k_proj", "v_proj", "o_proj"
+    "q_proj", "k_proj"
 ]
 
 def parse_args():
@@ -117,9 +117,9 @@ def main():
     print(f"Configuring LoRA (Unsloth) with targets: {LORA_TARGET_MODULES}")
     model = FastLanguageModel.get_peft_model(
         model,
-        r=16,
+        r=8,
         target_modules=LORA_TARGET_MODULES,
-        lora_alpha=32,
+        lora_alpha=16,
         lora_dropout=0.05,
         bias="none",
         use_gradient_checkpointing="unsloth",
