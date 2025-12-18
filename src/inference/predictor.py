@@ -6,6 +6,7 @@ from tqdm import tqdm
 from typing import List, Dict, Any
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from src.config.config import PRED_CHOICES_MAP
+from src.models.chat_template import setup_chat_template
 
 
 def predict(
@@ -29,6 +30,8 @@ def predict(
         Predicted answer (1-5)
     """
     model.eval()
+    
+    setup_chat_template(tokenizer)
     
     with torch.inference_mode():
         # Apply chat template
@@ -86,6 +89,8 @@ def predict_batch(
     """
     model.eval()
     infer_results = []
+    
+    setup_chat_template(tokenizer)
     
     iterator = tqdm(test_dataset) if show_progress else test_dataset
     
