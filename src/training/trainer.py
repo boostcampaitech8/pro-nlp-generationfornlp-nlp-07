@@ -4,7 +4,7 @@ from typing import Optional
 
 from pathlib import Path
 from trl import SFTTrainer, SFTConfig
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizer, EarlyStoppingCallback
 from datasets import Dataset
 from peft import LoraConfig
 # from src.training.data_collator import get_data_collator  # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
@@ -33,6 +33,7 @@ def create_trainer(
     tokenizer: PreTrainedTokenizer,
     train_dataset: Dataset,
     eval_dataset: Dataset,
+
     output_dir: str,
     peft_config: Optional[LoraConfig] = None,
     learning_rate: float = None,
@@ -153,7 +154,7 @@ def create_trainer(
         preprocess_logits_for_metrics=preprocess_logits_func,
         peft_config=peft_config,
         args=sft_config,
-        callbacks=[SaveBestModelCallback(best_model_dir=best_model_dir)],  # Best model 저장 callback 추가
+        callbacks=[SaveBestModelCallback(best_model_dir=best_model_dir), EarlyStoppingCallback(early_stopping_patience=2)],  # Best model 저장 callback 추가
     )
     
     return trainer

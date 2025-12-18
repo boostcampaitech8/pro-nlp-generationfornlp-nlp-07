@@ -38,13 +38,13 @@ from src.inference.submission import create_submission
 from src.utils.seed import set_seed
 
 # Defaults (can be overridden by CLI args)
-DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B" 
-DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v4"
+DEFAULT_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507" 
+DEFAULT_EXPERIMENT_NAME = "qwen3-4b-inst2507-v1"
 
 # LoRA Target Modules for Qwen/Llama
 # Common targets: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
 LORA_TARGET_MODULES = [
-    "q_proj", "k_proj"
+    "q_proj", "k_proj", "v_proj", "o_proj"
 ]
 
 def parse_args():
@@ -117,9 +117,9 @@ def main():
     print(f"Configuring LoRA (Unsloth) with targets: {LORA_TARGET_MODULES}")
     model = FastLanguageModel.get_peft_model(
         model,
-        r=8,
+        r=16,
         target_modules=LORA_TARGET_MODULES,
-        lora_alpha=16,
+        lora_alpha=32,
         lora_dropout=0.05,
         bias="none",
         use_gradient_checkpointing="unsloth",
@@ -145,6 +145,8 @@ def main():
         eval_strategy="epoch",
         save_total_limit=10,
         load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
     )
 
     # Run Training
