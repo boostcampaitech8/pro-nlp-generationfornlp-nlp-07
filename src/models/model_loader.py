@@ -4,6 +4,7 @@ import torch
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import AutoPeftModelForCausalLM
+from unsloth import FastLanguageModel
 from typing import Optional, Union
 
 
@@ -98,3 +99,63 @@ def load_checkpoint(
     
     return model, tokenizer
 
+
+def load_model_unsloth(
+    model_name: str,
+    max_seq_length: int = 2048,
+    dtype: Optional[torch.dtype] = None,
+    load_in_4bit: bool = False,
+    **kwargs
+):
+    """
+    Load model using Unsloth
+    
+    Args:
+        model_name: Model name
+        max_seq_length: Maximum sequence length
+        dtype: Data type (None for auto)
+        load_in_4bit: Whether to load in 4bit
+        **kwargs: Additional arguments
+        
+    Returns:
+        Tuple of (model, tokenizer)
+    """
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_name,
+        max_seq_length=max_seq_length,
+        dtype=dtype,
+        load_in_4bit=load_in_4bit,
+        **kwargs
+    )
+    return model, tokenizer
+
+
+def load_checkpoint_unsloth(
+    checkpoint_path: str,
+    max_seq_length: int = 2048,
+    dtype: Optional[torch.dtype] = None,
+    load_in_4bit: bool = False,
+    **kwargs
+):
+    """
+    Load checkpoint using Unsloth
+    
+    Args:
+        checkpoint_path: Path to checkpoint directory
+        max_seq_length: Maximum sequence length
+        dtype: Data type
+        load_in_4bit: Whether to load in 4bit
+        **kwargs: Additional arguments
+        
+    Returns:
+        Tuple of (model, tokenizer)
+    """
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=checkpoint_path,
+        max_seq_length=max_seq_length,
+        dtype=dtype,
+        load_in_4bit=load_in_4bit,
+        **kwargs
+    )
+    FastLanguageModel.for_inference(model)
+    return model, tokenizer

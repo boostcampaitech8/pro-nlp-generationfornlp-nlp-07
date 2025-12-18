@@ -1,5 +1,7 @@
 """Training utilities"""
 
+from typing import Optional
+
 from pathlib import Path
 from trl import SFTTrainer, SFTConfig
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -31,8 +33,8 @@ def create_trainer(
     tokenizer: PreTrainedTokenizer,
     train_dataset: Dataset,
     eval_dataset: Dataset,
-    peft_config: LoraConfig,
     output_dir: str,
+    peft_config: Optional[LoraConfig] = None,
     learning_rate: float = None,
     num_train_epochs: int = None,
     per_device_train_batch_size: int = None,
