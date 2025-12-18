@@ -13,21 +13,17 @@
 
 # List of Models to Experiment With
 MODELS=(
-    "Qwen/Qwen2.5-7B-Instruct"
-    # "Qwen/Qwen2.5-14B-Instruct" 
-    # Add more models here...
+    "NCSOFT/Llama-VARCO-8B-Instruct"
 )
 
 # List of Experiment Names (Must match the order of MODELS)
 EXPERIMENTS=(
-    "qwen2.5-7b-lora-test-v1"
-    # "qwen2.5-14b-lora-test-v1"
-    # Add more experiment names here...
+    "llama-varco-8b-lora-v1"
 )
 
 # Set to true to delete local checkpoints after successful run/upload
 # This helps prevent filling up disk space when running many experiments.
-DELETE_LOCAL_CHECKPOINTS=true
+DELETE_LOCAL_CHECKPOINTS=false
 
 # ------------------------------------------------------------------------------
 

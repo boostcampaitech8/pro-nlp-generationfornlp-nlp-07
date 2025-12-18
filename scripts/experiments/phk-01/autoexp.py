@@ -38,7 +38,7 @@ from src.utils.seed import set_seed
 
 # Defaults (can be overridden by CLI args)
 DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B" 
-DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v1"
+DEFAULT_EXPERIMENT_NAME = "qwen3-8b-lora-v2"
 
 # LoRA Target Modules for Qwen/Llama
 # Common targets: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
@@ -129,13 +129,14 @@ def main():
         eval_dataset=eval_dataset,
         peft_config=peft_config,
         output_dir=str(OUTPUT_DIR),
-        learning_rate=2e-4,  # QLoRA/LoRA often uses higher LR like 2e-4
+        learning_rate=2e-5,  # QLoRA/LoRA often uses higher LR like 2e-4
         num_train_epochs=3,   # Adjustable
         per_device_train_batch_size=2, # Adjust based on GPU memory
         per_device_eval_batch_size=2,
         gradient_accumulation_steps=4, # Simulate larger batch size
         save_strategy="epoch",
         eval_strategy="epoch",
+        save_total_limit=10,
         load_best_model_at_end=True,
     )
 
