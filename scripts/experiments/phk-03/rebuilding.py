@@ -30,7 +30,7 @@ SUBMISSION_DIR = project_root / "submissions" / CAMPER_ID
 
 # 모델 로더 설정값
 MODEL_LOADER_CONFIG = {
-    "model_name": str(BEST_MODEL_DIR),#"beomi/gemma-ko-2b",
+    "model_name": "beomi/gemma-ko-2b",
     "max_seq_length": 1024, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
     "dtype": torch.float16, # V100 사용중이므로 Float16 기본 사용
     "load_in_4bit": False,  # Use 4bit quantization to reduce memory usage. Can be False.
@@ -75,13 +75,13 @@ CHAT_TEMPLATE_CONFIG = {
     "response_part": None,      # 만약! None으로 했을 때, 마스킹 검증 과정에서 오류가 발생한다면 둘 다 사용하는 모델에 맞게 입력해야 합니다.
     # Tokenizer에 chat_template이 없을 경우, 기본 사용되는 chat_template, instruction_part, response_part 입니다. (범용 ChatML 양식, 수정하지 않는 것을 권장)
     "default_chat_template": """{% for message in messages %}{% if message['role'] == 'user' %}{{'<|im_start|>user
-    ' + message['content'] + '<|im_end|>
-    '}}{% elif message['role'] == 'assistant' %}{{'<|im_start|>assistant
-    ' + message['content'] + '<|im_end|>
-    ' }}{% else %}{{ '<|im_start|>system
-    ' + message['content'] + '<|im_end|>
-    ' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant
-    ' }}{% endif %}""",
+' + message['content'] + '<|im_end|>
+'}}{% elif message['role'] == 'assistant' %}{{'<|im_start|>assistant
+' + message['content'] + '<|im_end|>
+' }}{% else %}{{ '<|im_start|>system
+' + message['content'] + '<|im_end|>
+' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant
+' }}{% endif %}""",
 }
 
 # 데이터 파일 설정
