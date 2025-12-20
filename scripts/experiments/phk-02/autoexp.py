@@ -97,20 +97,22 @@ def main():
     print("Setting up chat template...")
     tokenizer = setup_chat_template(tokenizer, model_name=MODEL_NAME)
 
-    # Tokenize
-    print("Tokenizing dataset...")
-    tokenized_dataset = tokenize_dataset(dataset, tokenizer)
-
-    # Filter
-    print(f"Filtering by max length: {MAX_TOKEN_LENGTH}")
-    tokenized_dataset = filter_by_length(tokenized_dataset, MAX_TOKEN_LENGTH)
+    # Filter raw dataset by length manually to prevent OOM
+    print(f"Filtering dataset by token length (limit: {MAX_TOKEN_LENGTH})...")
+    def filter_func(example):
+        # Apply chat template and check length
+        text = tokenizer.apply_chat_template(example["messages"], tokenize=False)
+        tokens = tokenizer.encode(text, add_special_tokens=False)
+        return len(tokens) <= MAX_TOKEN_LENGTH
+    
+    dataset = dataset.filter(filter_func, desc="Filtering by length")
 
     # Split (incorporating validation as per train.py)
     print(f"Splitting dataset (test_size={TEST_SIZE})...")
-    tokenized_dataset = tokenized_dataset.train_test_split(test_size=TEST_SIZE, seed=RANDOM_SEED)
+    split_dataset = dataset.train_test_split(test_size=TEST_SIZE, seed=RANDOM_SEED)
     
-    train_dataset = tokenized_dataset['train']
-    eval_dataset = tokenized_dataset['test']
+    train_dataset = split_dataset['train']
+    eval_dataset = split_dataset['test']
     print(f"Train samples: {len(train_dataset)}, Eval samples: {len(eval_dataset)}")
 
     # LoRA Config

@@ -7,7 +7,6 @@ from trl import SFTTrainer, SFTConfig
 from transformers import PreTrainedModel, PreTrainedTokenizer, EarlyStoppingCallback
 from datasets import Dataset
 from peft import LoraConfig
-# from src.training.data_collator import get_data_collator  # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
 from src.training.metrics import compute_metrics, preprocess_logits_for_metrics
 from src.training.callbacks import SaveBestModelCallback
 from src.config.config import (
@@ -102,15 +101,12 @@ def create_trainer(
     tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = 'right'
     
-    # Create data collator
-    # data_collator = get_data_collator(tokenizer, response_template)  # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
     
     # Set default values for kwargs if not provided
     kwargs.setdefault("gradient_checkpointing", True)
     kwargs.setdefault("load_best_model_at_end", True)
     kwargs.setdefault("metric_for_best_model", "eval_loss")
     kwargs.setdefault("greater_is_better", False)
-    kwargs.setdefault("completion_only_loss", True) # trl>0.20.0 버전은 해당 구문이 data_collator 대신 사용됩니다.
 
     sft_config = SFTConfig(
         do_train=True,
@@ -129,6 +125,8 @@ def create_trainer(
         save_total_limit=save_total_limit,
         save_only_model=save_only_model,
         report_to=report_to,
+        completion_only_loss=True, #  prompt-completion 데이터셋용
+        # assistant_only_loss=True,  # Conversational 포맷(messages)에 최적화된 마스킹
         **kwargs
     )
     
@@ -148,7 +146,7 @@ def create_trainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        # data_collator=data_collator, # trl>0.20.0 버전은 data_collator를 사용하지 않습니다.
+        # data_collator=None, # SFTConfig의 completion_only_loss=True를 통해 자동 처리
         processing_class=tokenizer,
         compute_metrics=compute_metrics_func,
         preprocess_logits_for_metrics=preprocess_logits_func,

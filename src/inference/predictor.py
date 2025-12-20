@@ -123,8 +123,19 @@ def predict_batch(
             logits = outputs.logits[:, -1].flatten().cpu()
             
             # Get logits for answer tokens (1, 2, 3, 4, 5)
-            # Use encode to get reliable token IDs. [-1] takes the last token in case of prefix space/start token behavior.
-            token_ids = [tokenizer.encode(str(i + 1), add_special_tokens=False)[-1] for i in range(len_choices)]
+            # Use encode but handle potential leading space issues or special tokens
+            # Most tokenizers will have a specific ID for "1", "2", etc.
+            # We want the ID of the token that WOULD be generated next.
+            token_ids = []
+            for i in range(1, len_choices + 1):
+                # We try both with and without space if needed, 
+                # but usually apply_chat_template's add_generation_prompt leaves things ready for the bare digit.
+                tid = tokenizer.convert_tokens_to_ids(str(i))
+                if tid == tokenizer.unk_token_id:
+                    # Fallback if bare string isn't in vocab (unlikely for digits)
+                    tid = tokenizer.encode(str(i), add_special_tokens=False)[-1]
+                token_ids.append(tid)
+                
             target_logit_list = [logits[tid] for tid in token_ids]
             
             # Apply softmax
