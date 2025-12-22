@@ -10,6 +10,7 @@ from trl import SFTConfig, SFTTrainer
 from pathlib import Path
 from tqdm import tqdm
 import sys
+from dotenv import load_dotenv
 
 
 # 해당 파일은 scripts/experiments/memberA/ 폴더에 위치한 것이므로,
@@ -17,11 +18,16 @@ import sys
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from src.utils.hf_utils import upload_all_checkpoints_to_hf
+
+load_dotenv()
+
 ### 직접 수정 가능한 변수들은 실험하기 편하게 상단에 모아 두었습니다.
 # 상수
 RANDOM_STATE = 42
 CAMPER_ID = "T8091"
-EXP_NAME = "rebuilding2"
+EXP_NAME = "qwen3-4b-it-2507-v2"
+HF_ORG = "NLP-07-ODQA"
 
 # 경로
 OUTPUT_DIR = project_root / "outputs" / CAMPER_ID / EXP_NAME
@@ -30,8 +36,8 @@ SUBMISSION_DIR = project_root / "submissions" / CAMPER_ID
 
 # 모델 로더 설정값
 MODEL_LOADER_CONFIG = {
-    "model_name": "beomi/gemma-ko-2b",
-    "max_seq_length": 1024, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
+    "model_name": "Qwen/Qwen3-4B-Instruct-2507", # str(BEST_MODEL_DIR),#
+    "max_seq_length": 4096, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
     "dtype": torch.float16, # V100 사용중이므로 Float16 기본 사용
     "load_in_4bit": False,  # Use 4bit quantization to reduce memory usage. Can be False.
     # token = "hf_...",     # 승인이 필요한 모델을 사용하는 경우 허깅페이스 토큰이 필요하다는 뜻인 것 같습니다. (원문: use one if using gated models like meta-llama/Llama-2-7b-hf)
@@ -96,19 +102,19 @@ PROCESSING_CONFIG = {
     "eval_split_ratio": 0.1,                            # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
     "system_prompt": "지문을 읽고 질문의 답을 구하세요.",   # 시스템 프롬프트는 User role의 맨 앞에 추가됩니다 (chat_template마다 system role의 지원 여부가 다르므로)
     "prompt_template": """{system_prompt}
-    
-    지문:
-    {paragraph}
-    
-    질문:
-    {question}
-    {question_plus_section}
-    
-    선택지:
-    {choices}
-    
-    {choice_range} 중에 하나를 정답으로 고르세요.
-    정답:""",
+
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus_section}
+
+선택지:
+{choices}
+
+{choice_range} 중에 하나를 정답으로 고르세요.
+정답:""",
 }
 
 INFERENCE_CONFIG = {
@@ -246,7 +252,7 @@ def parse_data(example):
 # 사용하려는 데이터셋의 컬럼 구성이 다르다면 이 함수를 반드시 수정해야 합니다!
 def build_prompt(data):
     question_plus_section = f"\n<보기>:\n{data['question_plus']}" if data['question_plus'] else ""
-    choices_string = '\n'.join([f"{i + 1} - {choice}" for i, choice in enumerate(data['choices'])])
+    choices_string = '\n'.join([f"{i + 1}. {choice}" for i, choice in enumerate(data['choices'])])
     choice_range = ', '.join(map(str, range(1, len(data['choices']) + 1)))
 
     return PROCESSING_CONFIG['prompt_template'].format(
@@ -269,6 +275,19 @@ def build_messages(data, include_answer):
     
     return messages
 
+# 별도 토큰(<think>) 자동 생성 방지를 위한 안전 래퍼
+def apply_chat_template_safe(tokenizer, messages, include_answer, tokenize=False):
+    text = tokenizer.apply_chat_template(
+        messages[:1],
+        tokenize=tokenize,
+        add_generation_prompt=False,
+    )
+
+    if len(messages) == 2:
+        text += CHAT_TEMPLATE_CONFIG['response_part'] + messages[1]['content'] + tokenizer.eos_token
+
+    return text
+
 # 포맷팅 함수 (기본 데이터셋 형식에 맞춰져 있습니다.)
 # 사용하려는 데이터셋의 컬럼 구성이 다르다면 이 함수를 반드시 수정해야 합니다!
 def formatting_func(example, tokenizer, include_answer):
@@ -283,11 +302,7 @@ def formatting_func(example, tokenizer, include_answer):
             'answer': example['answer'][idx],
         }, include_answer)
         
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=not include_answer
-        )
+        text = apply_chat_template_safe(tokenizer, messages, include_answer)
         texts.append(text)
     
     return {"text": texts}
@@ -405,9 +420,9 @@ trainer = train_on_responses_only(
 print("✅ 모델 학습 준비 완료")
 
 
-### 마스킹 검증 과정
+### 학습 내용 검증 과정
 print("=" * 50)
-print("   마스킹 검증 과정")
+print("   학습 내용 검증 과정")
 print("=" * 50)
 
 batch = next(iter(trainer.get_train_dataloader()))
@@ -416,14 +431,24 @@ labels = batch["labels"][0]
 learning_ratio = (labels != -100).sum().item() / len(labels)
 learning_text = tokenizer.decode(labels[labels != -100])
 print(f"학습 토큰 비율: {learning_ratio*100:.1f}%")
-print(f"학습 내용: {repr(learning_text)[:100]}...")
+print(f"학습 내용: {learning_text}")
 
+# 마스킹 비율 검사
 if learning_ratio > 0.5:
     print("⚠️ 마스킹 검증 실패 (학습 비율 50% 초과)")
     print("→ CHAT_TEMPLATE_CONFIG에서 instruction_part와 response_part를 사용 모델에 맞게 수정하세요.")
     sys.exit(1)
 else:
     print("✅ 마스킹 검증 성공")
+
+# 학습 내용 검사
+stripped = learning_text.strip()
+if not stripped or stripped[0] not in ["1", "2", "3", "4", "5"]:
+    print("⚠️ 학습 내용 검증 실패 (최초 학습 토큰이 1~5 사이의 값이 아님)")
+    print("→ chat_template, apply_chat_template_safe(), response_part 중 어딘가 잘못된 부분이 있습니다!")
+    sys.exit(1)
+else:
+    print("✅ 학습 내용 검증 성공")
 
 
 ### 학습 시작
@@ -463,6 +488,33 @@ BEST_MODEL_DIR.mkdir(parents=True, exist_ok=True)
 trainer.save_model(str(BEST_MODEL_DIR))
 tokenizer.save_pretrained(str(BEST_MODEL_DIR))
 print("✅ 학습 완료 모델 저장됨")
+
+
+### 허깅페이스 모델 업로드
+print("=" * 50)
+print("   허깅페이스 모델 업로드")
+print("=" * 50)
+# 체크포인트 업로드
+try:
+    hf_model_name = f"{HF_ORG}/{EXP_NAME}"
+
+    print(f"모델 업로드 시작: {hf_model_name}")
+    uploaded_urls = upload_all_checkpoints_to_hf(
+        output_dir=str(OUTPUT_DIR),
+        model_name=hf_model_name,
+        experiment_name=EXP_NAME,
+    )
+
+    if uploaded_urls:
+        print(f"✅ {len(uploaded_urls)}개의 체크포인트 업로드 완료")
+        for url in uploaded_urls:
+            print(f"   - {url}")
+    else:
+        print("⚠️ 업로드할 체크포인트가 없습니다.")
+
+except Exception as e:
+    print(f"⚠️ 모델 업로드 과정에서 오류가 발생하였습니다: {e}")
+    raise
 
 
 ### 추론 과정
@@ -520,6 +572,19 @@ with torch.no_grad():
             max_length = MODEL_LOADER_CONFIG['max_seq_length'],
         ).to(model.device)
         
+        # 첫 샘플로 디버깅
+        if i == 0:
+            print("첫 샘플로 디버깅 수행")
+            debug_output = model.generate(
+                **{k: v[:1] for k, v in inputs.items()},
+                do_sample=False,
+            )
+            debug_decode = tokenizer.decode(debug_output[0], skip_special_tokens=False)
+            print("   Prompt:")
+            print(batch_texts[0])
+            print("   Model Answer:")
+            print(debug_decode)
+
         # 추론
         outputs = model(**inputs)
 
@@ -529,10 +594,7 @@ with torch.no_grad():
             len_choices = batch_len_choices[j]
             
             # 정답 토큰 logits 추출
-            target_logits = [
-                logits[vocab[str(k + 1)]] 
-                for k in range(len_choices)
-            ]
+            target_logits = [logits[vocab[str(k + 1)]] for k in range(len_choices)]
             
             # Softmax 및 예측
             probs = torch.nn.functional.softmax(
