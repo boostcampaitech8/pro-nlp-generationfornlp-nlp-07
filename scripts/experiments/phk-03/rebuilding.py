@@ -99,7 +99,7 @@ DATA_FILES = {
 # chat_template마다 system role의 지원 여부가 다르므로, system_prompt를 user role의 맨 처음 부분에 통합하였습니다.
 # 또한, 전처리 로직에서 현재 프롬프트는 question_plus 컬럼의 존재 여부, choices 컬럼의 갯수에 따라 최종 내용을 다르게 처리합니다.
 PROCESSING_CONFIG = {
-    "eval_split_ratio": 0.1,                            # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
+    "eval_split_ratio": 0,                            # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
     "system_prompt": "지문을 읽고 질문의 답을 구하세요.",   # 시스템 프롬프트는 User role의 맨 앞에 추가됩니다 (chat_template마다 system role의 지원 여부가 다르므로)
     "prompt_template": """{system_prompt}
 
@@ -212,6 +212,8 @@ def auto_parts(model_name=None):
     
     # Mistral/Mixtral
     elif 'mistral' in model_name or 'mixtral' in model_name:
+        # Mistral 계열 모델은 현재 Eval 사용 시 오류가 발생합니다!
+        PROCESSING_CONFIG['eval_split_ratio'] = 0
         return '[INST]', '[/INST]'
     
     # Phi 계열
