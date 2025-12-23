@@ -26,7 +26,7 @@ load_dotenv()
 # 상수
 RANDOM_STATE = 42
 CAMPER_ID = "T8091"
-EXP_NAME = "qwen3-4b-it-2507-v2"
+EXP_NAME = "qwen3-32b-qlora-v1"
 HF_ORG = "NLP-07-ODQA"
 
 # 경로
@@ -36,21 +36,21 @@ SUBMISSION_DIR = project_root / "submissions" / CAMPER_ID
 
 # 모델 로더 설정값
 MODEL_LOADER_CONFIG = {
-    "model_name": "Qwen/Qwen3-4B-Instruct-2507", # str(BEST_MODEL_DIR),#
+    "model_name": str(BEST_MODEL_DIR),#"unsloth/Qwen3-32B-bnb-4bit", # str(BEST_MODEL_DIR),#
     "max_seq_length": 4096, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
     "dtype": torch.float16, # V100 사용중이므로 Float16 기본 사용
-    "load_in_4bit": False,  # Use 4bit quantization to reduce memory usage. Can be False.
+    "load_in_4bit": True,  # Use 4bit quantization to reduce memory usage. Can be False.
     # token = "hf_...",     # 승인이 필요한 모델을 사용하는 경우 허깅페이스 토큰이 필요하다는 뜻인 것 같습니다. (원문: use one if using gated models like meta-llama/Llama-2-7b-hf)
 }
 
 # LoRA 어댑터 설정값
 LORA_CONFIG = {
     "target_modules": [
-        "q_proj", "k_proj"
+        "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
     ],                                         # 모듈 종류: "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
-    "r": 6,                                    # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-    "lora_alpha": 8,                           # 보통 r 값과 동일하거나 2배로 설정
-    "lora_dropout": 0.05,                      # Supports any, but = 0 is optimized
+    "r": 8,                                    # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
+    "lora_alpha": 16,                           # 보통 r 값과 동일하거나 2배로 설정
+    "lora_dropout": 0,                      # Supports any, but = 0 is optimized
     "bias": "none",                            # Supports any, but = "none" is optimized
     "use_gradient_checkpointing": "unsloth",   # True or "unsloth" for very long context
     "random_state": RANDOM_STATE,
@@ -449,6 +449,7 @@ if not stripped or stripped[0] not in ["1", "2", "3", "4", "5"]:
     sys.exit(1)
 else:
     print("✅ 학습 내용 검증 성공")
+
 
 
 ### 학습 시작
