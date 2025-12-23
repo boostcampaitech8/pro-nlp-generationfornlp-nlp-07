@@ -288,8 +288,9 @@ def apply_chat_template_safe(tokenizer, messages, include_answer, tokenize=False
         add_generation_prompt=False,
     )
 
+    text += CHAT_TEMPLATE_CONFIG['response_part']
     if len(messages) == 2:
-        text += CHAT_TEMPLATE_CONFIG['response_part'] + messages[1]['content'] + tokenizer.eos_token
+        text += messages[1]['content'] + tokenizer.eos_token
 
     return text
 
