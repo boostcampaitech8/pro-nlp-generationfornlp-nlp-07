@@ -357,6 +357,7 @@ if PROCESSING_CONFIG['eval_split_ratio'] > 0:
     print(f"   Eval: {len(eval_dataset)}")
 else:
     eval_dataset = None
+    SFT_CONFIG['eval_strategy'] = 'no'
     print("⚠️ Eval 데이터셋 분할 안 함 (eval_split_ratio = 0)")
 
 # 데이터셋 포맷팅 적용
