@@ -171,9 +171,13 @@ if not callable(getattr(tokenizer, 'get_vocab', None)):
     # get_vocab이 없거나 호출 불가능하면 추가
     if hasattr(tokenizer, 'vocab'):
         tokenizer.get_vocab = lambda: tokenizer.vocab
-        print("⚠️ 구형 토크나이저 감지: get_vocab() 메서드 추가")
+        print("⚠️ 구형 토크나이저 감지: get_vocab() 메서드 추가됨")
     else:
-        raise AttributeError("Tokenizer에 vocab, get_vocab이 둘 다 없습니다!")
+        choice_tokens = [str(i) for i in range(1, 6)]
+        choice_ids = [tokenizer.encode(t, add_special_tokens=False)[0] for t in choice_tokens]
+        partial_vocab= {t: i for t, i in zip(choice_tokens, choice_ids)}
+        tokenizer.get_vocab = lambda: partial_vocab
+        print("⚠️ get_vocab, vocab 둘 다 없음: 부분적인 vocab 추가됨")
 
 
 ### Tokenizer의 chat_template 확인 과정
@@ -288,7 +292,10 @@ def apply_chat_template_safe(tokenizer, messages, include_answer, tokenize=False
         add_generation_prompt=False,
     )
 
-    text += CHAT_TEMPLATE_CONFIG['response_part']
+    # [/INST]를 사용하는 경우 User 템플릿에 이미 포함되어 있으므로 추가하지 않음 (Error case: Mistral 계열)
+    if CHAT_TEMPLATE_CONFIG['response_part'] != "[/INST]":
+        text += CHAT_TEMPLATE_CONFIG['response_part']
+    
     if len(messages) == 2:
         text += messages[1]['content'] + tokenizer.eos_token
 
@@ -452,6 +459,8 @@ stripped = learning_text.strip()
 if not stripped or stripped[0] not in ["1", "2", "3", "4", "5"]:
     print("⚠️ 학습 내용 검증 실패 (최초 학습 토큰이 1~5 사이의 값이 아님)")
     print("→ chat_template, apply_chat_template_safe(), response_part 중 어딘가 잘못된 부분이 있습니다!")
+    print("마스킹 전 전체 텍스트 (디버그 용):")
+    print(tokenizer.decode(batch['input_ids'][0], skip_special_tokens=False))
     sys.exit(1)
 else:
     print("✅ 학습 내용 검증 성공")
