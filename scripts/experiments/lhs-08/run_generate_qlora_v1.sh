@@ -2,7 +2,7 @@
 set -e
 
 # HF org/private token
-export HF_TOKEN="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"
+export HF_TOKEN="hf_"
 
 # Base + QLoRA adapter
 export BASE_MODEL="unsloth/Qwen3-32B-bnb-4bit"
