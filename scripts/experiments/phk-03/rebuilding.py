@@ -157,6 +157,11 @@ print("=" * 50)
 model, tokenizer = FastLanguageModel.from_pretrained(**MODEL_LOADER_CONFIG)
 print(f"✅ 모델 로드 완료: {MODEL_LOADER_CONFIG['model_name']}")
 
+# Processor 구조인 모델의 경우 tokenizer만 로드
+if hasattr(tokenizer, 'tokenizer'):
+    tokenizer = tokenizer.tokenizer
+    print("✅ 현재 모델은 Processor를 사용하고 있습니다! 자동으로 tokenizer를 추출합니다.")
+
 # 모델에 LoRA 어댑터 추가
 model = FastLanguageModel.get_peft_model(model, **LORA_CONFIG)
 print("✅ LoRA 어댑터 추가 완료")
