@@ -26,7 +26,7 @@ load_dotenv()
 # 상수
 RANDOM_STATE = 42
 CAMPER_ID = "T8091"
-EXP_NAME = "a.x-4.0-light-lora-v1"
+EXP_NAME = "exaone-4.0-32b-qlora-v1"
 HF_ORG = "NLP-07-ODQA"
 
 # 경로
@@ -36,10 +36,10 @@ SUBMISSION_DIR = project_root / "submissions" / CAMPER_ID
 
 # 모델 로더 설정값
 MODEL_LOADER_CONFIG = {
-    "model_name": "skt/A.X-4.0-Light", # str(BEST_MODEL_DIR),#
+    "model_name": "comoZ/EXAONE-4.0-32B-bnb-4bit", # str(BEST_MODEL_DIR),#
     "max_seq_length": 4096, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
     "dtype": torch.float16, # V100 사용중이므로 Float16 기본 사용
-    "load_in_4bit": False,  # Use 4bit quantization to reduce memory usage. Can be False.
+    "load_in_4bit": True,  # Use 4bit quantization to reduce memory usage. Can be False.
     # token = "hf_...",     # 승인이 필요한 모델을 사용하는 경우 허깅페이스 토큰이 필요하다는 뜻인 것 같습니다. (원문: use one if using gated models like meta-llama/Llama-2-7b-hf)
 }
 
