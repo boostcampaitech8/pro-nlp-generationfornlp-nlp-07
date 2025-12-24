@@ -2,6 +2,7 @@ accelerate==1.12.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.2
 aiosignal==1.4.0
+annotated-types==0.7.0
 anyio==4.12.0
 asttokens @ file:///opt/conda/conda-bld/asttokens_1646925590279/work
 astunparse==1.6.3
@@ -12,6 +13,7 @@ beautifulsoup4 @ file:///croot/beautifulsoup4-split_1681493039619/work
 bitsandbytes==0.49.0
 boltons @ file:///croot/boltons_1677628692245/work
 brotlipy==0.7.0
+cachetools==6.2.4
 certifi @ file:///croot/certifi_1690232220950/work/certifi
 cffi @ file:///croot/cffi_1670423208954/work
 chardet @ file:///home/builder/ci_310/chardet_1640804867535/work
@@ -32,6 +34,7 @@ datasets==4.4.2
 debugpy==1.8.19
 decorator @ file:///opt/conda/conda-bld/decorator_1643638310831/work
 dill==0.4.0
+distro==1.9.0
 dnspython==2.4.2
 docstring_parser==0.17.0
 evaluate==0.4.3
@@ -43,9 +46,20 @@ fonttools==4.61.1
 frozenlist==1.8.0
 fsspec==2023.9.2
 gmpy2 @ file:///tmp/build/80754af9/gmpy2_1645455533097/work
+google-ai-generativelanguage==0.6.15
+google-api-core==2.28.1
+google-api-python-client==2.187.0
+google-auth==2.45.0
+google-auth-httplib2==0.3.0
+google-genai==1.56.0
+google-generativeai==0.8.6
+googleapis-common-protos==1.72.0
+grpcio==1.76.0
+grpcio-status==1.71.2
 h11==0.16.0
 hf-xet==1.2.0
 httpcore==1.0.9
+httplib2==0.31.0
 httpx==0.28.1
 huggingface-hub==0.36.0
 hypothesis==6.87.1
@@ -95,7 +109,7 @@ nvidia-nvtx-cu12==12.8.90
 packaging @ file:///croot/packaging_1693575174725/work
 pandas==2.3.3
 parso @ file:///opt/conda/conda-bld/parso_1641458642106/work
-peft==0.13.2
+peft==0.18.0
 pexpect @ file:///tmp/build/80754af9/pexpect_1605563209008/work
 pickleshare @ file:///tmp/build/80754af9/pickleshare_1606932040724/work
 Pillow @ file:///croot/pillow_1695134008276/work
@@ -104,12 +118,18 @@ platformdirs==4.5.1
 pluggy @ file:///tmp/build/80754af9/pluggy_1648024709248/work
 prompt-toolkit @ file:///croot/prompt-toolkit_1672387306916/work
 propcache==0.4.1
+proto-plus==1.27.0
+protobuf==5.29.5
 psutil @ file:///opt/conda/conda-bld/psutil_1656431268089/work
 ptyprocess @ file:///tmp/build/80754af9/ptyprocess_1609355006118/work/dist/ptyprocess-0.7.0-py2.py3-none-any.whl
 pure-eval @ file:///opt/conda/conda-bld/pure_eval_1646925070566/work
 pyarrow==22.0.0
+pyasn1==0.6.1
+pyasn1_modules==0.4.2
 pycosat @ file:///croot/pycosat_1666805502580/work
 pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
+pydantic==2.12.5
+pydantic_core==2.41.5
 Pygments @ file:///croot/pygments_1684279966437/work
 pyOpenSSL @ file:///croot/pyopenssl_1690223430423/work
 pyparsing==3.2.5
@@ -121,16 +141,19 @@ PyYAML @ file:///croot/pyyaml_1670514731622/work
 pyzmq==27.1.0
 regex==2025.11.3
 requests==2.32.5
+rsa==4.9.1
 ruamel.yaml @ file:///croot/ruamel.yaml_1666304550667/work
 ruamel.yaml.clib @ file:///croot/ruamel.yaml.clib_1666302247304/work
 safetensors==0.7.0
 scikit-learn==1.5.2
 scipy==1.15.3
 six @ file:///tmp/build/80754af9/six_1644875935023/work
+sniffio==1.3.1
 sortedcontainers==2.4.0
 soupsieve @ file:///croot/soupsieve_1696347547217/work
 stack-data @ file:///opt/conda/conda-bld/stack_data_1646927590127/work
 sympy==1.14.0
+tenacity==9.1.2
 threadpoolctl==3.6.0
 tokenizers==0.22.1
 tomli @ file:///opt/conda/conda-bld/tomli_1657175507142/work
@@ -148,11 +171,14 @@ trl==0.11.4
 truststore @ file:///croot/truststore_1695244293384/work
 typeguard==4.4.4
 types-dataclasses==0.6.6
+typing-inspection==0.4.2
 typing_extensions==4.15.0
 tyro==1.0.2
 tzdata==2025.3
+uritemplate==4.2.0
 urllib3 @ file:///croot/urllib3_1686163155763/work
 wcwidth @ file:///Users/ktietz/demo/mc3/conda-bld/wcwidth_1629357192024/work
+websockets==15.0.1
 widgetsnbextension==4.0.15
 xxhash==3.6.0
 yarl==1.22.0
