@@ -166,6 +166,12 @@ if hasattr(tokenizer, 'tokenizer'):
 model = FastLanguageModel.get_peft_model(model, **LORA_CONFIG)
 print("✅ LoRA 어댑터 추가 완료")
 
+# 토크나이저 토큰 점검
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token_id = tokenizer.eos_token_id
+    print("⚠️ 토크나이저 pad_token이 없어서 eos_token으로 설정됨")
+
 # 구형 토크나이저의 경우 vocab을 불러오는 방식이 다름 (get_vocab 메서드로 통일)
 if not callable(getattr(tokenizer, 'get_vocab', None)):
     # get_vocab이 없거나 호출 불가능하면 추가
@@ -220,6 +226,10 @@ def auto_parts(model_name=None):
     elif 'phi' in model_name:
         return '<|user|>\n', '<|assistant|>\n'
     
+    # Solar 계열
+    elif 'solar' in model_name:
+        return '### User:\n', '### Assistant:\n'
+
     # 기본값 (ChatML)
     else:
         return '<|im_start|>user\n', '<|im_start|>assistant\n'
@@ -236,6 +246,16 @@ else:
 if CHAT_TEMPLATE_CONFIG['instruction_part'] is None or CHAT_TEMPLATE_CONFIG['response_part'] is None:
     CHAT_TEMPLATE_CONFIG['instruction_part'], CHAT_TEMPLATE_CONFIG['response_part'] = auto_parts(MODEL_LOADER_CONFIG['model_name'])
     print("✅ instruct_part, response_part 자동 탐색 사용됨")
+
+# 설정된 instruction_part, response_part를 스페셜 토큰으로 등록
+special_tokens = {
+    "additional_special_tokens": [
+        CHAT_TEMPLATE_CONFIG['instruction_part'],
+        CHAT_TEMPLATE_CONFIG['response_part'],
+    ]
+}
+tokenizer.add_special_tokens(special_tokens)
+model.resize_token_embeddings(len(tokenizer))
 
 # 설정된 instruction_part, response_part 확인
 print(f"   instruction_part: {repr(CHAT_TEMPLATE_CONFIG['instruction_part'])}")
@@ -374,9 +394,6 @@ print("=" * 50)
 print("   모델 학습 준비 과정")
 print("=" * 50)
 # 모델 학습을 위한 Tokenizer 설정
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
 tokenizer.padding_side = 'right' # Training용 padding side, Inference용 padding side는 'left'
 
 # Evaluation을 위한 Mertic 설정
@@ -428,11 +445,27 @@ trainer = SFTTrainer(
 )
 
 # Unsloth 마스킹 적용
-trainer = train_on_responses_only(
-    trainer,
-    instruction_part = CHAT_TEMPLATE_CONFIG['instruction_part'],
-    response_part = CHAT_TEMPLATE_CONFIG['response_part'],
-)
+try:
+    trainer = train_on_responses_only(
+        trainer,
+        instruction_part = CHAT_TEMPLATE_CONFIG['instruction_part'],
+        response_part = CHAT_TEMPLATE_CONFIG['response_part'],
+    )
+except ZeroDivisionError as e:
+    print(f"⚠️ 마스킹 적용 중 오류 발생: {e}")
+
+    sample = train_dataset[0]['text']
+    print("디버깅용 샘플 데이터:")
+    print(repr(sample))
+
+    i = sample.find(CHAT_TEMPLATE_CONFIG['instruction_part'])
+    j = sample.find(CHAT_TEMPLATE_CONFIG['response_part'])
+    print("Instruction Part:")
+    print(repr(sample[i:j]))
+    print("Response Part:")
+    print(repr(sample[j:]))
+
+    sys.exit(1)
 print("✅ 모델 학습 준비 완료")
 
 
