@@ -9,6 +9,8 @@ peft==0.13.2
 requests==2.32.5
 numpy==1.26.4
 rich==14.2.0
+pandas==2.2.2
+seaborn==0.13.2
 
 # 모듈화하면서 추가된 라이브러리입니다.
 python-dotenv==1.0.0
