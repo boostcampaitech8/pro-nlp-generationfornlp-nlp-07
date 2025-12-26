@@ -11,7 +11,7 @@ from pathlib import Path
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
-
+import argparse
 
 # 해당 파일은 scripts/experiments/memberA/ 폴더에 위치한 것이므로,
 # project root를 따로 추가해줍니다.
@@ -22,11 +22,50 @@ from src.utils.hf_utils import upload_all_checkpoints_to_hf
 
 load_dotenv()
 
+### 명령줄 인자 파싱
+# Boolean 타입 인자 처리를 위한 함수
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean 값이 아닙니다!')
+
+# 인자 등록
+parser = argparse.ArgumentParser(description="LLM PEFT Training and Inference Script w.Unsloth")
+# 필수 인자
+parser.add_argument('--exp_name', type=str, required=True, help='실험 이름')
+parser.add_argument('--model_name', type=str, required=True, help='모델 이름 또는 경로')
+# 모델 로더 설정
+parser.add_argument('--max_seq_length', type=int, default=4096, help='최대 시퀀스 길이')
+parser.add_argument('--load_in_4bit', type=str2bool, default=True, help='4비트 양자화 사용 여부')
+# LoRA 설정
+parser.add_argument('--target_modules', type=str, nargs='+', default=['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'],
+                    help='LoRA 타겟 모듈 (기본값: q_proj k_proj v_proj o_proj gate_proj up_proj down_proj)')
+parser.add_argument('--lora_r', type=int, default=8, help='LoRA rank (기본값: 8)')
+parser.add_argument('--lora_alpha', type=int, default=16, help='LoRA alpha (기본값: 16, 보통 r의 1~2배)')
+parser.add_argument('--lora_dropout', type=float, default=0.0, help='LoRA dropout (기본값: 0.0)')
+# SFT 설정
+parser.add_argument('--learning_rate', type=float, default=2e-5, help='학습률 (기본값: 2e-5)')
+parser.add_argument('--num_train_epochs', type=int, default=3, help='학습 에포크 수 (기본값: 3)')
+parser.add_argument('--per_device_train_batch_size', type=int, default=1, help='디바이스당 학습 배치 크기 (기본값: 1)')
+parser.add_argument('--per_device_eval_batch_size', type=int, default=1, help='디바이스당 평가 배치 크기 (기본값: 1)')
+parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='그래디언트 누적 스텝 (기본값: 1)')
+parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay (기본값: 0.01)')
+# 데이터 설정
+parser.add_argument('--eval_split_ratio', type=float, default=0.0, help='Eval 데이터 분할 비율 (기본값: 0.0)')
+
+args = parser.parse_args()
+
+
 ### 직접 수정 가능한 변수들은 실험하기 편하게 상단에 모아 두었습니다.
 # 상수
 RANDOM_STATE = 42
 CAMPER_ID = "T8091"
-EXP_NAME = "qwen2.5-32b-it-qlora-v1"
+EXP_NAME = args.exp_name
 HF_ORG = "NLP-07-ODQA"
 
 # 경로
@@ -36,38 +75,36 @@ SUBMISSION_DIR = project_root / "submissions" / CAMPER_ID
 
 # 모델 로더 설정값
 MODEL_LOADER_CONFIG = {
-    "model_name": "unsloth/Qwen2.5-32B-Instruct-bnb-4bit", # str(BEST_MODEL_DIR),#
-    "max_seq_length": 4096, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
+    "model_name": args.model_name,
+    "max_seq_length": args.max_seq_length, # 현재 데이터의 시퀀스 길이가 대부분 500~3000 사이이므로, 그 이상으로 설정합니다.
     "dtype": torch.float16, # V100 사용중이므로 Float16 기본 사용
-    "load_in_4bit": True,  # Use 4bit quantization to reduce memory usage. Can be False.
+    "load_in_4bit": args.load_in_4bit,  # Use 4bit quantization to reduce memory usage. Can be False.
     # token = "hf_...",     # 승인이 필요한 모델을 사용하는 경우 허깅페이스 토큰이 필요하다는 뜻인 것 같습니다. (원문: use one if using gated models like meta-llama/Llama-2-7b-hf)
 }
 
 # LoRA 어댑터 설정값
 LORA_CONFIG = {
-    "target_modules": [
-        "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
-    ],                                         # 모듈 종류: "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
-    "r": 8,                                    # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-    "lora_alpha": 16,                           # 보통 r 값과 동일하거나 2배로 설정
-    "lora_dropout": 0,                      # Supports any, but = 0 is optimized
-    "bias": "none",                            # Supports any, but = "none" is optimized
-    "use_gradient_checkpointing": "unsloth",   # True or "unsloth" for very long context
+    "target_modules": args.target_modules,      # 모듈 종류: "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
+    "r": args.lora_r,                           # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
+    "lora_alpha": args.lora_alpha,              # 보통 r 값과 동일하거나 2배로 설정
+    "lora_dropout": args.lora_dropout,          # Supports any, but = 0 is optimized
+    "bias": "none",                             # Supports any, but = "none" is optimized
+    "use_gradient_checkpointing": "unsloth",    # True or "unsloth" for very long context
     "random_state": RANDOM_STATE,
-    "use_rslora": False,                       # We support rank stabilized LoRA
-    "loftq_config": None,                      # And LoftQ
+    "use_rslora": False,                        # We support rank stabilized LoRA
+    "loftq_config": None,                       # And LoftQ
 }
 
 # SFT 설정값
 SFT_CONFIG = {
     "output_dir": OUTPUT_DIR,
     "lr_scheduler_type": "cosine",
-    "learning_rate": 2e-5,
-    "num_train_epochs": 3,
-    "per_device_train_batch_size": 1,
-    "per_device_eval_batch_size": 1,
-    # "gradient_accumulation_steps": 4,
-    "weight_decay": 0.01,
+    "learning_rate": args.learning_rate,
+    "num_train_epochs": args.num_train_epochs,
+    "per_device_train_batch_size": args.per_device_train_batch_size,
+    "per_device_eval_batch_size": args.per_device_eval_batch_size,
+    # "gradient_accumulation_steps": args.gradient_accumulation_steps,
+    "weight_decay": args.weight_decay,
     "logging_steps": 1,
     "save_strategy": "epoch",
     "eval_strategy": "epoch",
@@ -99,7 +136,7 @@ DATA_FILES = {
 # chat_template마다 system role의 지원 여부가 다르므로, system_prompt를 user role의 맨 처음 부분에 통합하였습니다.
 # 또한, 전처리 로직에서 현재 프롬프트는 question_plus 컬럼의 존재 여부, choices 컬럼의 갯수에 따라 최종 내용을 다르게 처리합니다.
 PROCESSING_CONFIG = {
-    "eval_split_ratio": 0,                            # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
+    "eval_split_ratio": args.eval_split_ratio,          # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
     "system_prompt": "지문을 읽고 질문의 답을 구하세요.",   # 시스템 프롬프트는 User role의 맨 앞에 추가됩니다 (chat_template마다 system role의 지원 여부가 다르므로)
     "prompt_template": """{system_prompt}
 
