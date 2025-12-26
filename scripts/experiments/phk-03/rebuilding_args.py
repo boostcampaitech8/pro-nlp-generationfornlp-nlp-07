@@ -58,6 +58,7 @@ parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight dec
 # 데이터 설정
 parser.add_argument('--train_data', type=str, default='train.csv', help='학습 데이터 파일 이름 (기본값: train.csv)')
 parser.add_argument('--eval_split_ratio', type=float, default=0.0, help='Eval 데이터 분할 비율 (기본값: 0.0)')
+parser.add_argument('--is_cot_data', type=str2bool, default=False, help='CoT 데이터 여부 (기본값: False)')
 
 args = parser.parse_args()
 
@@ -138,18 +139,24 @@ DATA_FILES = {
 # 또한, 전처리 로직에서 현재 프롬프트는 question_plus 컬럼의 존재 여부, choices 컬럼의 갯수에 따라 최종 내용을 다르게 처리합니다.
 PROCESSING_CONFIG = {
     "eval_split_ratio": args.eval_split_ratio,          # Train 데이터셋에서 Evaluation 데이터셋으로 분할할 비율 (0으로 설정 시 분할하지 않음: 자동적으로 Eval도 수행 안함)
+    "is_cot_data": args.is_cot_data,
     "system_prompt": "지문을 읽고 질문의 답을 구하세요.",   # 시스템 프롬프트는 User role의 맨 앞에 추가됩니다 (chat_template마다 system role의 지원 여부가 다르므로)
     "prompt_template": """{system_prompt}
 
+
 지문:
 {paragraph}
+
 
 질문:
 {question}
 {question_plus_section}
 
+
 선택지:
 {choices}
+{cot_section}
+
 
 {choice_range} 중에 하나를 정답으로 고르세요.
 정답:""",
@@ -316,14 +323,16 @@ def parse_data(example):
         'question_plus': problems.get('question_plus', None),
         'choices': problems['choices'],
         'answer': problems.get('answer', None),
+        'cot_text': problems.get('cot_text', None),
     }
 
 # 프롬프트 빌더 함수 (기본 데이터셋 형식에 맞춰져 있습니다.)
 # 사용하려는 데이터셋의 컬럼 구성이 다르다면 이 함수를 반드시 수정해야 합니다!
 def build_prompt(data):
-    question_plus_section = f"\n<보기>:\n{data['question_plus']}" if data['question_plus'] else ""
+    question_plus_section = f"\n\n<보기>:\n{data['question_plus']}" if data['question_plus'] else ""
     choices_string = '\n'.join([f"{i + 1}. {choice}" for i, choice in enumerate(data['choices'])])
     choice_range = ', '.join(map(str, range(1, len(data['choices']) + 1)))
+    cot_section = f"\n\n문제 풀이 과정:\n{data['cot_text'] or '단계적으로 생각해보겠습니다.'}" if PROCESSING_CONFIG['is_cot_data'] else ""
 
     return PROCESSING_CONFIG['prompt_template'].format(
         system_prompt=PROCESSING_CONFIG['system_prompt'],
@@ -332,6 +341,7 @@ def build_prompt(data):
         question_plus_section=question_plus_section,
         choices=choices_string,
         choice_range=choice_range,
+        cot_section=cot_section,
     )
 
 # 메시지 빌더 함수
