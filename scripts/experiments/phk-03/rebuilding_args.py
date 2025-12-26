@@ -56,6 +56,7 @@ parser.add_argument('--per_device_eval_batch_size', type=int, default=1, help='�
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='그래디언트 누적 스텝 (기본값: 1)')
 parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay (기본값: 0.01)')
 # 데이터 설정
+parser.add_argument('--train_data', type=str, default='train.csv', help='학습 데이터 파일 이름 (기본값: train.csv)')
 parser.add_argument('--eval_split_ratio', type=float, default=0.0, help='Eval 데이터 분할 비율 (기본값: 0.0)')
 
 args = parser.parse_args()
@@ -129,7 +130,7 @@ CHAT_TEMPLATE_CONFIG = {
 
 # 데이터 파일 설정
 DATA_FILES = {
-    "train": str(project_root / "data" / "train" / "train.csv"),
+    "train": str(project_root / "data" / "train" / args.train_data),
     "test": str(project_root / "data" / "test" / "test.csv"),
 }
 
