@@ -332,7 +332,7 @@ def build_prompt(data):
     question_plus_section = f"\n\n<보기>:\n{data['question_plus']}" if data['question_plus'] else ""
     choices_string = '\n'.join([f"{i + 1}. {choice}" for i, choice in enumerate(data['choices'])])
     choice_range = ', '.join(map(str, range(1, len(data['choices']) + 1)))
-    cot_section = f"\n\n문제 풀이 과정:\n{data['cot_text'] or '단계적으로 생각해보겠습니다.'}" if PROCESSING_CONFIG['is_cot_data'] else ""
+    cot_section = f"\n\n문제 풀이 과정:\n{data['cot_text'] or '단계적으로 생각해봅시다.'}" if PROCESSING_CONFIG['is_cot_data'] else ""
 
     return PROCESSING_CONFIG['prompt_template'].format(
         system_prompt=PROCESSING_CONFIG['system_prompt'],
@@ -384,6 +384,7 @@ def formatting_func(example, tokenizer, include_answer):
             'question_plus': example['question_plus'][idx],
             'choices': example['choices'][idx],
             'answer': example['answer'][idx],
+            'cot_text': example['cot_text'][idx],
         }, include_answer)
         
         text = apply_chat_template_safe(tokenizer, messages, include_answer)
