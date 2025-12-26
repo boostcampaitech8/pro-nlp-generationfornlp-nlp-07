@@ -1,4 +1,5 @@
 #!/bin/bash
+export TZ='Asia/Seoul'
 
 cleanup_cache() {
     echo ""
@@ -19,10 +20,9 @@ cleanup_cache() {
     echo ""
 }
 
-# 실험 목록 (exp_name:model_name 형식)
+# 실험 목록 (exp_name:model_name:additional_args)
 experiments=(
-    "qwen2.5-32b-it-qlora-v1:unsloth/Qwen2.5-32B-Instruct-bnb-4bit"
-    "yi-34b-chat-qlora-v1:unsloth/yi-34b-chat-bnb-4bit"
+    "a.x-4.0-light-lora-v2:skt/A.X-4.0-Light:--load_in_4bit False --per_device_train_batch_size 2 --gradient_accumulation_steps 8"
 )
 
 total=${#experiments[@]}
@@ -41,20 +41,22 @@ for exp in "${experiments[@]}"; do
     current=$((current + 1))
     
     # : 기준으로 exp_name과 model_name 분리
-    IFS=':' read -r exp_name model_name <<< "$exp"
+    IFS=':' read -r exp_name model_name additional_args <<< "$exp"
     
     echo ""
     echo "=========================================="
     echo "   📊 실험 [$current/$total]: $exp_name"
     echo "=========================================="
     echo "모델: $model_name"
-    echo "시작 시간: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "추가 인자: $additional_args"
+    echo "시작 시간: $(TZ='Asia/Seoul' date '+%Y-%m-%d %H:%M:%S')"
     echo ""
     
     # 학습 및 추론 실행
     python rebuilding_args.py \
         --exp_name "$exp_name" \
-        --model_name "$model_name"
+        --model_name "$model_name" \
+        $additional_args
     
     exit_code=$?
     
@@ -66,7 +68,7 @@ for exp in "${experiments[@]}"; do
         # 실패 시 중단하려면 아래 주석 해제
         # exit $exit_code
     fi
-    echo "종료 시간: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "종료 시간: $(TZ='Asia/Seoul' date '+%Y-%m-%d %H:%M:%S')"
     
     # 다음 실험이 있는지 확인
     if [ $current -lt $total ]; then
@@ -91,5 +93,5 @@ done
 echo ""
 echo "=========================================="
 echo "   🎉 모든 실험 완료! ($current/$total)"
-echo "   종료 시간: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "   종료 시간: $(TZ='Asia/Seoul' date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
