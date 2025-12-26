@@ -22,7 +22,7 @@ cleanup_cache() {
 
 # 실험 목록 (exp_name:model_name:additional_args)
 experiments=(
-    "a.x-4.0-light-lora-v2:skt/A.X-4.0-Light:--load_in_4bit False --per_device_train_batch_size 2 --gradient_accumulation_steps 8"
+    "a.x-4.0-light-lora-v3:skt/A.X-4.0-Light:--load_in_4bit False --train_data train_with_cot.csv --is_cot_data True"
 )
 
 total=${#experiments[@]}
