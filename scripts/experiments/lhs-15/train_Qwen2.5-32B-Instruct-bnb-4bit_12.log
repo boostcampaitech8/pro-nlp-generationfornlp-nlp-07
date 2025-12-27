@@ -1,0 +1,14 @@
+nohup: ignoring input
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+==================================================
+   모델 로드 및 준비 과정
+==================================================
+==((====))==  Unsloth 2025.12.6: Fast Qwen2 patching. Transformers: 4.57.3.
+   \\   /|    Tesla V100-SXM2-32GB. Num GPUs = 1. Max memory: 31.739 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.9.1+cu128. CUDA: 7.0. CUDA Toolkit: 12.8. Triton: 3.5.1
+\        /    Bfloat16 = FALSE. FA [Xformers = 0.0.33.post2. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:01<00:04,  1.44s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:03<00:03,  1.51s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:04<00:01,  1.53s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:05<00:00,  1.44s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:05<00:00,  1.46s/it]
+✅ 모델 로드 완료: unsloth/Qwen2.5-32B-Instruct-bnb-4bit
