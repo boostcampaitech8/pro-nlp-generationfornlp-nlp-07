@@ -24,8 +24,7 @@ cleanup_cache() {
 
 # 실험 목록 (exp_name:model_name:additional_args)
 experiments=(
-    "qwen2.5-32b-it-qlora-v4.2:unsloth/Qwen2.5-32B-Instruct-bnb-4bit:--lora_r 32 --lora_alpha 64"
-    "qwen2.5-32b-it-qlora-v4.1:unsloth/Qwen2.5-32B-Instruct-bnb-4bit:--lora_r 16 --lora_alpha 32"
+    "qwen3-32b-qlora-v5:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --train_data train_shuffled.csv"
 )
 
 total=${#experiments[@]}
