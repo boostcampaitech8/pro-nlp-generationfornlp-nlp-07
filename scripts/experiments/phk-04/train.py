@@ -48,6 +48,7 @@ parser.add_argument('--target_modules', type=str, nargs='+', default=['q_proj', 
 parser.add_argument('--lora_r', type=int, default=8, help='LoRA rank (기본값: 8)')
 parser.add_argument('--lora_alpha', type=int, default=16, help='LoRA alpha (기본값: 16, 보통 r의 1~2배)')
 parser.add_argument('--lora_dropout', type=float, default=0.0, help='LoRA dropout (기본값: 0.0)')
+parser.add_argument('--use_rslora', type=str2bool, default=False, help='Rank Stabilized LoRA 사용 여부 (기본값: False)')
 # SFT 설정
 parser.add_argument('--learning_rate', type=float, default=2e-5, help='학습률 (기본값: 2e-5)')
 parser.add_argument('--num_train_epochs', type=int, default=3, help='학습 에포크 수 (기본값: 3)')
@@ -93,7 +94,7 @@ LORA_CONFIG = {
     "bias": "none",                             # Supports any, but = "none" is optimized
     "use_gradient_checkpointing": "unsloth",    # True or "unsloth" for very long context
     "random_state": RANDOM_STATE,
-    "use_rslora": False,                        # We support rank stabilized LoRA
+    "use_rslora": args.use_rslora,                        # We support rank stabilized LoRA
     "loftq_config": None,                       # And LoftQ
 }
 
