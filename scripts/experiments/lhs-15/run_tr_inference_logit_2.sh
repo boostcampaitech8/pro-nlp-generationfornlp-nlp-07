@@ -16,7 +16,7 @@ export INFER_BASE_MODEL="unsloth/Qwen2.5-32B-Instruct-bnb-4bit"
 export MAX_SEQ_LENGTH=4096
 export EPOCHS=2
 export GRAD_ACCUM=8
-export WEIGHT_DECAY=0.0
+export WEIGHT_DECAY=0.02
 
 # ===== CoT 학습 on/off (공통) =====
 export USE_COT_TRAIN=1
@@ -102,7 +102,10 @@ run_one () {
 #run_one "11" "8e-5" "128" "256"
 
 
-run_one "12" "1e-4" "192" "128"
-run_one "13" "8e-5" "192" "128"
+#run_one "12" "9e-5" "128" "128"
+#run_one "13" "1e-4" "144" "128"
+#run_one "14" "1.05e-4" "128" "128"
+#run_one "15" "1e-4" "128" "128" # WEIGHT_DECAY=0.01
+run_one "16" "1e-4" "128" "128" # WEIGHT_DECAY=0.02
 
 echo "[DONE] All experiments completed."
