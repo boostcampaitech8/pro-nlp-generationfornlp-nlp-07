@@ -14,3 +14,21 @@ seaborn==0.13.2
 
 # 모듈화하면서 추가된 라이브러리입니다.
 python-dotenv==1.0.0
+
+# RAG datasets 정제를 위해 추가된 라이브러리입니다.
+langchain==0.1.0
+seaborn==0.13.2
+html2text==2024.2.26
+regex==2024.11.6
+seaborn==0.13.2
+html2text==2024.2.26
+regex==2024.11.6
+seaborn==0.13.2
+html2text==2024.2.26
+regex==2024.11.6
+seaborn==0.13.2
+html2text==2024.2.26
+regex==2024.11.6
+seaborn==0.13.2
+html2text==2024.2.26
+regex==2024.11.6

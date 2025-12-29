@@ -11,6 +11,13 @@ from .wikipedia_parser import (
     analyze_language_content,
     get_namespace_name,
 )
+from .wikipedia_cleaner import clean_wikitext, extract_sections
+from .rag_dataset_creator import (
+    create_rag_dataset,
+    create_cleaned_dataset,
+    create_chunks_from_cleaned,
+    upload_cleaned_dataset_to_hf,
+)
 
 __all__ = [
     "load_data",
@@ -29,5 +36,11 @@ __all__ = [
     "analyze_wikitext_tags",
     "analyze_language_content",
     "get_namespace_name",
+    "clean_wikitext",
+    "extract_sections",
+    "create_rag_dataset",
+    "create_cleaned_dataset",
+    "create_chunks_from_cleaned",
+    "upload_cleaned_dataset_to_hf",
 ]
 
