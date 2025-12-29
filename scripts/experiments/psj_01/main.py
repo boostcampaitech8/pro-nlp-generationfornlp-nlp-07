@@ -12,7 +12,7 @@ from agent_orchestrator import SuneungAgent
 
 def main():
     # 1. 설정 (API 키 입력)
-    API_KEY = "AIzaSyA7r4K6oTiq-LKdkVQU358R3TCjeyYzJDY" 
+    API_KEY = "" 
     
     # 2. 데이터 로드 (절대 경로 고정)
     data_path = "/data/ephemeral/home/pro-nlp-generationfornlp-nlp-07/data/train/train.csv"
