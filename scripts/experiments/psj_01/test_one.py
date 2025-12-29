@@ -10,7 +10,7 @@ from agent_orchestrator import SuneungAgent
 
 def test_single_sample():
     # 1. 환경 설정
-    API_KEY = "AIzaSyA7r4K6oTiq-LKdkVQU358R3TCjeyYzJDY" # API 키를 입력하세요
+    API_KEY = "" # API 키를 입력하세요
     agent = SuneungAgent(API_KEY)
 
     # 2. 테스트 데이터 구성
