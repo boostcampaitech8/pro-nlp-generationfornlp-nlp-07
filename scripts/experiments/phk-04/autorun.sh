@@ -24,9 +24,9 @@ cleanup_cache() {
 
 # 실험 목록 (exp_name:model_name:additional_args)
 experiments=(
-    "qwen3-32b-qlora-v6.1:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --lora_dropout 0.1"
-    "qwen3-32b-qlora-v6.2:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --lora_dropout 0.1 --learning_rate 1.5e-5"
-    "qwen3-32b-qlora-v6.3:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --lora_dropout 0.1 --use_rslora True"
+    "qwen3-32b-qlora-v7.1:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --train_data train_error.csv"
+    "qwen3-32b-qlora-v7.2:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --train_data train_mismatch.csv"
+    "qwen3-32b-qlora-v7.3:unsloth/Qwen3-32B-bnb-4bit:--lora_r 16 --lora_alpha 32 --train_data train_clean.csv"
 )
 
 total=${#experiments[@]}
