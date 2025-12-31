@@ -1,4 +1,4 @@
-# scripts/experiments/psj_07/log_rag_docs.py
+# scripts/experiments/psj_07/log_rag_docs_conf05.py
 
 import os
 import ast
@@ -34,8 +34,8 @@ TEST_PATH = "data/test/test.csv"
 MAX_SEQ_LENGTH = 4096
 SEED = 42
 
-# 🔼 base 예측의 confidence threshold (이거보다 낮으면 RAG 사용)
-CONF_THRESHOLD = 0.7
+# 🔽 base 예측의 confidence threshold (이거보다 낮으면 RAG 사용)
+CONF_THRESHOLD = 0.5
 
 # vector store / docs
 PERSIST_DIR = "scripts/experiments/psj_07/vectorstores/kowiki_e5_large"
@@ -43,19 +43,20 @@ DOCS_PKL = "scripts/experiments/psj_07/vectorstores/kowiki_docs.pkl"
 
 EMBED_MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
 
-# hybrid 검색
-TOP_K_DENSE = 6      # e5 dense에서 k개
-TOP_K_BM25 = 6       # Kiwi BM25에서 k개
+# hybrid 검색 (조금 더 넉넉하게)
+TOP_K_DENSE = 8      # e5 dense에서 k개
+TOP_K_BM25 = 8       # Kiwi BM25에서 k개
 TOP_K_FINAL = 4      # reranker 이후 최종 k개
 
 # reranker (bge-reranker-large)
 RERANKER_MODEL_NAME = "BAAI/bge-reranker-large"
+MIN_RERANK_SCORE = 0.0  # 너무 엉뚱한 문서 필터링 용도 (원하면 0.1~0.2로 조절 가능)
 
 # RAG 사용 문항 + 불러온 문서들 로그 저장 경로
-LOG_CSV_PATH = "scripts/experiments/psj_07/rag_used_docs_log_v2.csv"
+LOG_CSV_PATH = "scripts/experiments/psj_07/rag_used_docs_log_conf05.csv"
 
 # 최종 제출용 submission
-OUTPUT_CSV = "submission.csv"
+OUTPUT_CSV = "submission_rag_e5_hybrid_bge_conf05.csv"
 
 
 # ======================
@@ -96,7 +97,7 @@ def load_unsloth_model():
 # ======================
 
 class KiwiBM25Retriever:
-    def __init__(self, docs, k: int = 6):
+    def __init__(self, docs, k: int = 8):
         self.docs = docs
         self.k = k
         self.kiwi = Kiwi()
@@ -176,6 +177,7 @@ def hybrid_retrieve_with_rerank(query, dense_retriever, bm25_retriever, reranker
     """
     dense + BM25 하이브리드 검색 후
     bge-reranker로 rerank 해서 상위 TOP_K_FINAL 문서 반환
+    + reranker 점수가 너무 낮으면 아예 문서 사용 안 함
     """
 
     # 1) dense / sparse 각각 검색
@@ -206,7 +208,20 @@ def hybrid_retrieve_with_rerank(query, dense_retriever, bm25_retriever, reranker
     scores = reranker.predict(pairs)  # numpy array 또는 list
 
     ranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
-    top_docs = [d for d, _ in ranked[:TOP_K_FINAL]]
+
+    # 4) 상위 TOP_K_FINAL 중에서도 MIN_RERANK_SCORE 미만은 버림
+    filtered_docs = []
+    for d, s in ranked:
+        if s < MIN_RERANK_SCORE:
+            continue
+        filtered_docs.append((d, s))
+        if len(filtered_docs) >= TOP_K_FINAL:
+            break
+
+    if not filtered_docs:
+        return []
+
+    top_docs = [d for d, _ in filtered_docs]
     return top_docs
 
 
@@ -216,8 +231,7 @@ def hybrid_retrieve_with_rerank(query, dense_retriever, bm25_retriever, reranker
 
 def build_prompt(passage: str, question: str, choices, wiki_ctx: str = "") -> str:
     """
-    question + context summary 형태를 포함한 프롬프트
-    wiki_ctx에는 RAG로 가져온 요약/컨텍스트가 들어감.
+    wiki_ctx에는 RAG로 가져온 컨텍스트가 들어감.
     """
     choices_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(choices))
     wiki_block = wiki_ctx.strip() if wiki_ctx else "없음"
@@ -225,6 +239,7 @@ def build_prompt(passage: str, question: str, choices, wiki_ctx: str = "") -> st
     prompt = f"""너는 한국어 수능형 독해 문제를 푸는 AI 모델이다.
 지문과 문항, 보기를 읽고 정답 번호를 고른다.
 정답은 반드시 1, 2, 3, 4, 5 중 하나의 숫자만 출력한다.
+차근차근 생각한 후 답을 뱉는다.
 
 question: {question}
 context summary: 이 문제는 다음 내용을 이해해야 풀 수 있다.
@@ -272,10 +287,16 @@ def infer_confidence(model, tokenizer, prompt: str):
 # 7. RAG 쿼리 + 컨텍스트 구성
 # ======================
 
-def build_rag_query(paragraph: str, question: str) -> str:
-    # 지문에서 앞부분 600자 정도만 쿼리에 붙이기 (EDA 기준 안정권)
-    snippet = (paragraph or "")[:600]
-    query = f"query: {question}\n\n{snippet}"
+def build_rag_query(paragraph: str, question: str, choices) -> str:
+    # 지문에서 앞부분 500자 정도만 쿼리에 붙이기
+    snippet = (paragraph or "")[:500]
+    choices_joined = " / ".join(choices) if choices else ""
+    query = (
+        "다음은 한국 수능형 독해 문제이다. 관련 위키백과 배경 지식을 검색하라.\n\n"
+        f"[문항] {question}\n"
+        f"[선택지] {choices_joined}\n\n"
+        f"[지문 일부]\n{snippet}"
+    )
     return query
 
 
@@ -320,7 +341,7 @@ def print_base_result(base_pred, base_conf):
 def print_rag_summary(docs, rag_pred, rag_conf):
     print(f"[RAG]  pred={rag_pred} | conf={rag_conf:.4f}")
     if not docs:
-        print("[RAG]  ⚠️ retrieved_docs = 0 (검색 실패)")
+        print("[RAG]  ⚠️ retrieved_docs = 0 (검색 실패 또는 점수 너무 낮음)")
         return
 
     titles = [d.metadata.get("title", "") for d in docs]
@@ -400,7 +421,7 @@ def main():
         else:
             # (3) RAG용 쿼리 만들고 위키 문서 가져오기
             print(f"[RAG TRIGGER] base_conf < threshold({CONF_THRESHOLD})")
-            query = build_rag_query(paragraph, question)
+            query = build_rag_query(paragraph, question, choices)
             docs = hybrid_retrieve_with_rerank(
                 query,
                 dense_retriever,
