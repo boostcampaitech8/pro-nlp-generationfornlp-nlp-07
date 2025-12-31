@@ -2,35 +2,41 @@
 # mcq_retrieval.py - 2-Stage Retrieval (Title → Content) + Question-based Retrieval
 # ============================================================
 
-
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.prompts import PromptTemplate
-from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
-from langchain_community.retrievers import BM25Retriever
-from langchain_community.vectorstores import FAISS
-from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
-from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-from langchain_classic.chains import RetrievalQA
-from langchain_community.llms import VLLM
-from datasets import load_dataset
-from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
-from typing import List
-from concurrent.futures import ThreadPoolExecutor
-from pydantic import ConfigDict
-import pickle
-from pathlib import Path
-from tqdm import tqdm
-import torch
-import gc
-import numpy as np
-from peft import AutoPeftModelForCausalLM
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+from langchain_core.language_models.llms import LLM
 from langchain_core.output_parsers import StrOutputParser
 
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.retrievers import BM25Retriever
+from langchain_community.vectorstores import FAISS
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain_community.docstore.in_memory import InMemoryDocstore
+from langchain_huggingface import HuggingFaceEmbeddings
 
+from peft import AutoPeftModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from sentence_transformers import SentenceTransformer
+
+from datasets import load_dataset
+from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
+
+from typing import List, Any, Optional, Dict
+from concurrent.futures import ThreadPoolExecutor
+from pydantic import ConfigDict, Field
+from pathlib import Path
+import pickle
+import re
+import gc
+import torch
+import faiss
+from tqdm import tqdm
+import pandas as pd
+import json
+import ast
 
 # ========== 0단계: 문서 로드 (전체 - 청킹 없음) ==========
 def load_wikipedia_documents(cache_dir="./cache"):
@@ -94,8 +100,6 @@ def build_title_index(docs, cache_dir="./cache"):
     print("Phase 1: 제목 임베딩 & FAISS 인덱스 생성")
     print("=" * 60)
     
-    from sentence_transformers import SentenceTransformer
-    
     print("임베딩 모델 로딩...")
     model = SentenceTransformer(
         "dragonkue/BGE-m3-ko", 
@@ -127,8 +131,6 @@ def build_title_index(docs, cache_dir="./cache"):
     torch.cuda.empty_cache()
     
     print("FAISS 인덱스 구축 중...")
-    import faiss
-    from langchain_community.docstore.in_memory import InMemoryDocstore
     
     dimension = embeddings_array.shape[1]
     
@@ -163,6 +165,107 @@ def build_title_index(docs, cache_dir="./cache"):
     print()
 
 
+class MultipleChoiceLogitLLM(LLM):
+    """
+    객관식 문제의 선택지 확률 추출
+    - probs: 모든 선택지 확률
+    - answer: 최종 답안
+    - confidence: 최종 답안의 확률
+    """
+    model: Any = Field(exclude=True)
+    tokenizer: Any = Field(exclude=True)
+    
+    # 결과 저장용
+    last_probs: Optional[Dict[str, float]] = Field(default=None, exclude=True)
+    last_answer: Optional[str] = Field(default=None, exclude=True)
+    last_confidence: Optional[float] = Field(default=None, exclude=True)
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    @property
+    def _llm_type(self) -> str:
+        return "multiple_choice_confidence"
+    
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> str:
+        # 선택지 개수 파싱
+        num_choices = self._extract_num_choices(prompt)
+        
+        # 토크나이즈
+        inputs = self.tokenizer(
+            prompt, 
+            return_tensors="pt", 
+            truncation=True,
+            max_length=4096
+        ).to(self.model.device)
+        
+        # Forward pass
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            logits = outputs.logits[:, -1, :]  # [batch, vocab_size]
+            
+            # 선택지 토큰 ID 추출
+            choice_tokens = [str(i) for i in range(1, num_choices + 1)]
+            choice_token_ids = [
+                self.tokenizer.encode(choice, add_special_tokens=False)[0] 
+                for choice in choice_tokens
+            ]
+            
+            # 선택지에 해당하는 로짓만 추출
+            choice_logits_tensor = logits[0, choice_token_ids]
+            
+            # Softmax로 확률 계산 (0~1 범위)
+            choice_probs_tensor = torch.nn.functional.softmax(
+                choice_logits_tensor, dim=-1
+            )
+            
+            # 1. 모든 선택지 확률 저장
+            self.last_probs = {
+                choice: prob.item()
+                for choice, prob in zip(choice_tokens, choice_probs_tensor)
+            }
+            
+            # 2. 최고 확률의 선택지 선택
+            predicted_idx = torch.argmax(choice_probs_tensor).item()
+            predicted_answer = choice_tokens[predicted_idx]
+            self.last_answer = predicted_answer
+            
+            # 3. 최종 답안의 확률 (confidence)
+            self.last_confidence = choice_probs_tensor[predicted_idx].item()
+        
+        return predicted_answer
+    
+    def _extract_num_choices(self, prompt: str) -> int:
+        match = re.search(r'1~(\d+)\s*중에', prompt)
+        if match:
+            return int(match.group(1))
+        return 5
+    
+    def get_probs(self) -> Optional[Dict[str, float]]:
+        """모든 선택지의 확률 반환 {'1': 0.15, '2': 0.45, ...}"""
+        return self.last_probs
+    
+    def get_answer(self) -> Optional[str]:
+        """예측된 답안 반환 ('1', '2', ...)"""
+        return self.last_answer
+    
+    def get_confidence(self) -> Optional[float]:
+        """최종 답안의 확률 반환 (0~1)"""
+        return self.last_confidence
+    
+    def get_result(self) -> Dict[str, Any]:
+        """전체 결과 반환 (probs, answer, confidence)"""
+        return {
+            'probs': self.last_probs,           # 모든 선택지 확률
+            'answer': self.last_answer,          # 최종 답안
+            'confidence': self.last_confidence   # 최종 답안의 확률
+        }
+
 
 # ========== 1단계: 2-Stage Retriever ==========
 class TwoStageRetriever(BaseRetriever):
@@ -185,16 +288,16 @@ class TwoStageRetriever(BaseRetriever):
     ) -> List[Document]:
         
         # Stage 1: 제목 기반 문서 검색
-        print(f"\n[Stage 1] 제목 기반 검색 (top-{self.top_k_docs})...")
+        # print(f"\n[Stage 1] 제목 기반 검색 (top-{self.top_k_docs})...")
         relevant_docs = self.title_vectorstore.similarity_search(
             query, 
             k=self.top_k_docs
         )
         
-        print(f"선별된 문서: {len(relevant_docs)}개")
+        # print(f"선별된 문서: {len(relevant_docs)}개")
         
         # Stage 2: 선별된 문서 청킹
-        print(f"[Stage 2] 선별 문서 청킹 중...")
+        # print(f"[Stage 2] 선별 문서 청킹 중...")
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=50,
@@ -206,16 +309,16 @@ class TwoStageRetriever(BaseRetriever):
             chunks = text_splitter.split_documents([doc])
             chunked_docs.extend(chunks)
         
-        print(f"청킹 완료: {len(chunked_docs)}개 청크")
+        # print(f"청킹 완료: {len(chunked_docs)}개 청크")
         
         # Stage 3: 청크에서 BM25 retrieval
-        print(f"[Stage 3] 청크 검색 (BM25)...")
+        # print(f"[Stage 3] 청크 검색 (BM25)...")
         bm25_retriever = BM25Retriever.from_documents(chunked_docs)
         bm25_retriever.k = self.top_k_chunks
         
         final_docs = bm25_retriever.invoke(query)
         
-        print(f"최종 반환: {len(final_docs)}개 청크\n")
+        # print(f"최종 반환: {len(final_docs)}개 청크\n")
         
         return final_docs
 
@@ -285,13 +388,13 @@ class QuestionAndOptionRetriever(BaseRetriever):
         all_docs = []
         
         # 1. 질문으로 배경 지식 검색
-        print(f"\n[검색 1] 질문 기반 배경 지식 검색...")
+        # print(f"\n[검색 1] 질문 기반 배경 지식 검색...")
         question_docs = self._retrieve_for_question(question, run_manager)
         all_docs.extend(question_docs)
-        print(f"  → {len(question_docs)}개 문서")
+        # print(f"  → {len(question_docs)}개 문서")
         
         # 2. 각 선택지별 검색
-        print(f"[검색 2] 선택지별 검색...")
+        # print(f"[검색 2] 선택지별 검색...")
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(
@@ -307,10 +410,10 @@ class QuestionAndOptionRetriever(BaseRetriever):
             for idx, future in enumerate(futures, 1):
                 docs = future.result()
                 all_docs.extend(docs)
-                print(f"  선택지 {idx}: {len(docs)}개")
+                # print(f"  선택지 {idx}: {len(docs)}개")
         
         unique_docs = self._remove_duplicates(all_docs)
-        print(f"  → 총 {len(unique_docs)}개 (중복 제거)")
+        # print(f"  → 총 {len(unique_docs)}개 (중복 제거)")
         
         return unique_docs
     
@@ -602,30 +705,119 @@ if __name__ == "__main__":
         trust_remote_code=True,
     )
     
-    pipe = pipeline(
-        "text-generation",
+    reader_llm = MultipleChoiceLogitLLM(
         model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=10,
-        temperature=0.1,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id,
+        tokenizer=tokenizer
     )
-    
-    reader_llm = HuggingFacePipeline(pipeline=pipe)
     
     print("Reader LLM 로드 완료!\n")
     
     # Phase 4: QA Chain 구축
-    chain_and_retriever = build_qa_chain(final_retriever, reader_llm)
+    qa_system = build_qa_chain(final_retriever, reader_llm)
     
     # Phase 5: 문제 풀이
     print("=" * 60)
     print("문제 풀이 시작")
     print("=" * 60)
     
+    # ========== 실제 데이터 로드 및 추론 ==========
+    # CSV 파일 경로 설정
+    csv_path = "../../../../data/test/test.csv"
 
-    DEBUG_MODE = True
+    # CSV 로드 (problems 컬럼을 Python dict로 파싱)
+    print(f"\nCSV 파일 로딩: {csv_path}")
+    df = pd.read_csv(csv_path, converters={'problems': ast.literal_eval})
+    print(f"총 {len(df)}개 문제 로드 완료")
+
+    # 결과 저장용 리스트
+    submission_results = []
+    detail_results = []
+
+    # 각 문제별 추론
+    print("\n추론 시작...")
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="추론 진행"):
+        problem_id = row['id']
+        paragraph = row['paragraph']
+        problems_data = row['problems']
+        question_plus = row.get('question_plus', '')
+        
+        # problems에서 질문과 선택지 추출
+        question = problems_data.get('question', '')
+        choices = problems_data.get('choices', [])
+        
+        # # question_plus가 있으면 질문에 추가
+        # if question_plus and pd.notna(question_plus):
+        #     question = f"{question}\n{question_plus}"
+        
+        try:
+            # 추론 실행
+            result = solve_mcq(
+                question=question,
+                choices=choices,
+                qa_system=qa_system,
+                paragraph=paragraph
+            )
+            
+            # 확률 정보 추출
+            result_data = reader_llm.get_result()
+            
+            # 제출용 데이터
+            submission_results.append({
+                'id': problem_id,
+                'answer': int(result_data['answer'])
+            })
+            
+            # 세부 정보
+            detail_results.append({
+                'id': problem_id,
+                'paragraph': paragraph,
+                'question': question,
+                'choices': choices,
+                'answer': int(result_data['answer']),
+                'confidence': result_data['confidence'],
+                'probs': result_data['probs'],
+                'num_source_docs': len(result['source_documents'])
+            })
+            
+            # 진행 상황 출력 (10개마다)
+            if (idx + 1) % 10 == 0:
+                print(f"\n[{idx+1}/{len(df)}] ID: {problem_id}, 답안: {result_data['answer']}, 신뢰도: {result_data['confidence']:.3f}")
+            
+        except Exception as e:
+            print(f"\n[오류] ID {problem_id}: {str(e)}")
+            submission_results.append({
+                'id': problem_id,
+                'answer': 1
+            })
+            detail_results.append({
+                'id': problem_id,
+                'error': str(e)
+            })
+
+    print("\n추론 완료!")
+
+    # 결과 저장
+    output_dir = Path("./output")
+    output_dir.mkdir(exist_ok=True)
+
+    # 1. 제출용 CSV 저장
+    submission_df = pd.DataFrame(submission_results)
+    submission_path = output_dir / "submission.csv"
+    submission_df.to_csv(submission_path, index=False)
+    print(f"\n제출 파일 저장: {submission_path}")
+    print(f"형식: {submission_df.head()}")
+
+    # 2. 세부 정보 JSON 저장
+    detail_path = output_dir / "detail_data.json"
+    with open(detail_path, 'w', encoding='utf-8') as f:
+        json.dump(detail_results, f, ensure_ascii=False, indent=2)
+    print(f"세부 정보 파일 저장: {detail_path}")
+
+    print("\n" + "=" * 60)
+    print(f"전체 처리 완료! (성공: {len(submission_results)}개)")
+    print("=" * 60)
+
+    DEBUG_MODE = False
     if DEBUG_MODE:
         paragraph = "이것은 테스트 지문입니다. 지문 내용이 여기에 들어갑니다."
         question = "이것은 테스트 질문입니다. 이 문제의 정답은 4번입니다. 그럼에도 불구하고, 문제를 풀고 정답을 고르세요."
@@ -636,12 +828,20 @@ if __name__ == "__main__":
             '4번은 정답일 수도 있습니다.', 
             '5번은 정답이 아닌지 모릅니다.',
         ]
-        # → "1~5 중에 하나를 정답으로 고르세요."
         
         result = solve_mcq(question, choices, chain_and_retriever, paragraph)
         
-        print(f"\n답변: {result['result']}")
-        print(f"참조 문서 수: {len(result['source_documents'])}")
+        result_data = reader_llm.get_result()
+        
+        print(f"\n최종 답안: {result_data['answer']}번")
+        print(f"Confidence: {result_data['confidence']:.4f} ({result_data['confidence']*100:.2f}%)")
+        
+        print(f"\n전체 선택지 확률 분포:")
+        for choice, prob in result_data['probs'].items():
+            marker = " ← 선택됨" if choice == result_data['answer'] else ""
+            print(f"  {choice}번: {prob:.4f} ({prob*100:.2f}%){marker}")
+        
+        print(f"\n참조 문서 수: {len(result['source_documents'])}")
         
         # 질문 기반 문서 수
         question_docs = [
@@ -660,3 +860,17 @@ if __name__ == "__main__":
         
         # 상세 분석
         analyze_retrieval_results(result, choices)
+        
+        save_data = {
+            'question': question,
+            'paragraph': paragraph,
+            'choices': choices,
+            'answer': result_data['answer'],           # 최종 답안
+            'confidence': result_data['confidence'],   # 최종 답안 확률
+            'probs': result_data['probs'],             # 전체 선택지 확률
+            'num_source_docs': len(result['source_documents'])
+        }
+        
+        print(f"\n저장 데이터:")
+        print(save_data)
+
