@@ -61,6 +61,20 @@ RESPONSE_TEMPLATE = "<start_of_turn>model"
 INT_OUTPUT_MAP = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
 PRED_CHOICES_MAP = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
 
+# FAISS 임베딩 인덱스 설정
+FAISS_INDEX_DIR = DATA_DIR / "faiss_index"
+EMBEDDING_MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
+EMBEDDING_MAX_TOKENS = 512  # 모델 제한사항
+
+# 청킹 파라미터 (512 토큰 제한 고려)
+CHUNKING_HEADERS = [("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3")]
+CHUNK_SIZE = 400  # 512 토큰 제한을 고려한 안전한 크기 (한국어 기준 약 480-520 토큰)
+CHUNK_OVERLAP = 50
+
+# GPU 배치 처리 설정
+EMBEDDING_BATCH_SIZE = 32
+EMBEDDING_DEVICE = "cuda"  # "cuda" 또는 "cpu"
+
 
 def get_config():
     """Get configuration dictionary"""
@@ -94,6 +108,14 @@ def get_config():
         "random_seed": RANDOM_SEED,
         "system_message": SYSTEM_MESSAGE,
         "response_template": RESPONSE_TEMPLATE,
+        "faiss_index_dir": str(FAISS_INDEX_DIR),
+        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "embedding_max_tokens": EMBEDDING_MAX_TOKENS,
+        "chunking_headers": CHUNKING_HEADERS,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_overlap": CHUNK_OVERLAP,
+        "embedding_batch_size": EMBEDDING_BATCH_SIZE,
+        "embedding_device": EMBEDDING_DEVICE,
     }
 
 
