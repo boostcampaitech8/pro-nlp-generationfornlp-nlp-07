@@ -1,0 +1,9 @@
+nohup: ignoring input
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+Traceback (most recent call last):
+  File "/data/ephemeral/home/pro-nlp-generationfornlp-nlp-07/scripts/experiments/lhs-24/inference_rag_ver11_tfidf.py", line 1297, in <module>
+    main()
+  File "/data/ephemeral/home/pro-nlp-generationfornlp-nlp-07/scripts/experiments/lhs-24/inference_rag_ver11_tfidf.py", line 619, in main
+    base_model = os.environ.get("BASE_MODEL", "unsloth/Qwen2.5-32B-Instruct-bnb-4bit")
+UnboundLocalError: local variable 'os' referenced before assignment
