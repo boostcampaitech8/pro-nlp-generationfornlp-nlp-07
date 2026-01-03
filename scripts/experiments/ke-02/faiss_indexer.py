@@ -6,7 +6,7 @@ import pickle
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from langchain.schema import Document
+from langchain_core.documents import Document
 import logging
 
 logger = logging.getLogger(__name__)

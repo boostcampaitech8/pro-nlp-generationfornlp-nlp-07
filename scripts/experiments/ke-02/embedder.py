@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
-from langchain.schema import Document
+from langchain_core.documents import Document
 import logging
 
 logger = logging.getLogger(__name__)
