@@ -15,6 +15,7 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores import FAISS
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_community.docstore.in_memory import InMemoryDocstore
+from langchain_community.llms import LlamaCpp
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from peft import AutoPeftModelForCausalLM
@@ -38,6 +39,9 @@ import pandas as pd
 import json
 import ast
 import time
+from collections import Counter
+from llama_cpp import Llama
+from langchain_community.llms import LlamaCpp
 
 # ========== 0단계: 문서 로드 (전체 - 청킹 없음) ==========
 def load_wikipedia_documents(cache_dir="./cache"):
@@ -693,7 +697,7 @@ def analyze_retrieval_results(result, choices):
 
 # ========== 메인 실행 ==========
 if __name__ == "__main__":
-    import time
+    INF_MODE = "llamacpp"  # "huggingface" or "llamacpp"
     
     # Phase 1: 제목 임베딩
     docs = load_wikipedia_documents()
@@ -715,57 +719,98 @@ if __name__ == "__main__":
     
     # Phase 3: Reader LLM 로드
     print("=" * 60)
-    print("Phase 3: Reader LLM 모델 로드 (HuggingFace)")
+    print(f"Phase 3: Reader LLM 모델 로드 (Mode: {INF_MODE})")
     print("=" * 60)
 
-    model_name = "NLP-07-ODQA/Qwen2.5-32B-Instruct-bnb-4bit_15"
-    exp_name = "qwen2.5-32b-it-cot15_chain-v1"
-    
-    print(f"모델 로딩 중: {model_name}")
-    
-    try:
-        print("  [시도 1] LoRA Adapter 자동 로드...")
-        model = AutoPeftModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        print("  ✓ LoRA Adapter + Base Model 자동 로드 성공")
+    if INF_MODE == "huggingface":
+        # ========== HuggingFace 모드 ==========
+        model_name = "NLP-07-ODQA/Qwen2.5-32B-Instruct-bnb-4bit_15"
+        exp_name = "qwen2.5-32b-it-cot15_chain-v1"
         
-    except Exception as e:
-        print(f"  [시도 1 실패: {str(e)[:100]}]")
-        print("  [시도 2] 머지된 모델로 로드...")
-        model = AutoModelForCausalLM.from_pretrained(
+        print(f"모델 로딩 중: {model_name}")
+        
+        try:
+            print("  [시도 1] LoRA Adapter 자동 로드...")
+            model = AutoPeftModelForCausalLM.from_pretrained(
+                model_name,
+                device_map="auto",
+                trust_remote_code=True,
+            )
+            print("  ✓ LoRA Adapter + Base Model 자동 로드 성공")
+            
+        except Exception as e:
+            print(f"  [시도 1 실패: {str(e)[:100]}]")
+            print("  [시도 2] 머지된 모델로 로드...")
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                device_map="auto",
+                trust_remote_code=True,
+            )
+            print("  ✓ 머지된 모델 로드 성공")
+        
+        tokenizer = AutoTokenizer.from_pretrained(
             model_name,
-            device_map="auto",
             trust_remote_code=True,
         )
-        print("  ✓ 머지된 모델 로드 성공")
-    
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-    )
-    
-    reader_llm = MultipleChoiceLogitLLM(
-        model=model,
-        tokenizer=tokenizer
-    )
-    
-    print("Reader LLM 로드 완료!\n")
-
-    print("\n" + "="*60)
-    print("모델 배치 디버깅")
-    print("="*60)
-    if hasattr(model, 'hf_device_map'):
-        cpu_layers = [k for k, v in model.hf_device_map.items() if str(v) == 'cpu']
-        if cpu_layers:
-            print(f"⚠️  CPU에 배치된 레이어: {len(cpu_layers)}개")
-            print(f"예시: {cpu_layers[:5]}")
+        
+        reader_llm = MultipleChoiceLogitLLM(
+            model=model,
+            tokenizer=tokenizer
+        )
+        
+        print("Reader LLM 로드 완료 (HuggingFace)!\n")
+        
+        print("\n" + "="*60)
+        print("모델 배치 디버깅")
+        print("="*60)
+        if hasattr(model, 'hf_device_map'):
+            cpu_layers = [k for k, v in model.hf_device_map.items() if str(v) == 'cpu']
+            if cpu_layers:
+                print(f"⚠️  CPU에 배치된 레이어: {len(cpu_layers)}개")
+                print(f"예시: {cpu_layers[:5]}")
+            else:
+                print("✓ 모든 레이어가 GPU에 있습니다")
         else:
-            print("✓ 모든 레이어가 GPU에 있습니다")
+            print("device_map 정보 없음")
+    
+    elif INF_MODE == "llamacpp":
+        # ===== 설정 =====
+        model_name = "unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
+        gguf_filename = "Qwen3-30B-A3B-Thinking-2507-UD-Q5_K_XL.gguf"
+        exp_name = "qwen3-30b-tk2507_chain-v1"
+
+        print(f"GGUF 모델 로딩 중: {model_name}/{gguf_filename}")
+
+        # ===== 1단계: HF에서 GGUF 자동 다운로드 (원래 코드 유지) =====
+        # -> 이 호출로 HF 캐시에 gguf 파일이 받아짐
+        tmp_llm = Llama.from_pretrained(
+            repo_id=model_name,
+            filename=gguf_filename,
+            n_gpu_layers=0,   # 여기서는 실제로 쓸 게 아니라 다운로드/캐시 용도
+            n_ctx=2048,
+            verbose=False,
+        )
+
+        # llama_cpp는 내부적으로 huggingface 캐시에 파일을 받기 때문에,
+        # model_path로 캐시 위치를 직접 줄 필요 없이 gguf를 같은 파일명으로 참조해도 됨.
+        # (환경변수 HF_HOME / HUGGINGFACE_HUB_CACHE 등을 커스텀했다면 거기 기준)[web:32][web:33]
+
+        # ===== 2단계: LangChain LlamaCpp 로 다시 로드 =====
+        reader_llm = LlamaCpp(
+            # HF 캐시에 있는 gguf 경로 (기본 캐시 디렉토리 쓰면 파일명만으로도 동작하는 경우가 많음)
+            model_path=gguf_filename,
+            n_gpu_layers=40,
+            n_ctx=8192,
+            n_batch=512,
+            verbose=False,
+        )
+
+        print("Reader LLM 로드 완료 (LangChain LlamaCpp)!\n")
+        print("⚠️  이 모드는 LangChain LLM 프로토콜을 사용하므로, 기존 체인(`prompt | reader_llm | StrOutputParser`)과 호환됩니다.\n")
+
+
     else:
-        print("device_map 정보 없음")
+        raise ValueError(f"지원하지 않는 INF_MODE: {INF_MODE}. 'huggingface' 또는 'llamacpp'를 사용하세요.")
     
     # Phase 4: QA Chain 구축
     qa_system = build_qa_chain(final_retriever, reader_llm)
@@ -842,20 +887,44 @@ if __name__ == "__main__":
             
             if idx == 0:
                 print(f"  [Retrieval 전체]: {t1-t0:.2f}초")
+        
+            # ========== 모드별 결과 처리 ==========
+            if INF_MODE == "huggingface":
+                # HuggingFace: 로짓 기반 확률 추출
+                result_data = reader_llm.get_result()
+                answer = result_data['answer']
+                confidence = result_data['confidence']
+                probs = result_data['probs']
+                
+            elif INF_MODE == "llamacpp":
+                # llama.cpp: 텍스트 파싱
+                raw_answer = result['result'].strip()
+                
+                # 숫자 추출 (1, 2, 3, 4, 5)
+                match = re.search(r'^(\d+)', raw_answer)
+                if match:
+                    answer = match.group(1)
+                else:
+                    # 실패 시 기본값
+                    answer = "1"
+                    print(f"  [경고] ID {problem_id}: 답변 파싱 실패 - '{raw_answer}'")
+                
+                # llama.cpp는 확률 정보 제한적
+                confidence = None
+                probs = None
             
-            result_data = reader_llm.get_result()
             t2 = time.time()
             
             submission_results.append({
                 'id': problem_id,
-                'answer': result_data['answer']
+                'answer': answer
             })
             
             detail_results.append({
                 'id': problem_id,
-                'prediction': str(result_data['answer']),
-                'probabilities': result_data['probs'],
-                'confidence': result_data['confidence'],
+                'prediction': str(answer),
+                'probabilities': probs,  # llamacpp에서는 None
+                'confidence': confidence,  # llamacpp에서는 None
                 'num_choices': len(choices),
                 'num_source_docs': len(result['source_documents'])
             })
@@ -864,14 +933,19 @@ if __name__ == "__main__":
                 iter_time = time.time() - iter_start
                 estimated_total = iter_time * len(df) / 3600
                 
-                print(f"\n답안: {result_data['answer']} | 신뢰도: {result_data['confidence']:.3f}")
+                if INF_MODE == "huggingface":
+                    print(f"\n답안: {answer} | 신뢰도: {confidence:.3f}")
+                else:
+                    print(f"\n답안: {answer}")
+                
                 print(f"첫 문제 소요 시간: {iter_time:.1f}초")
                 print(f"예상 전체 소요 시간: {estimated_total:.2f}시간\n")
             
-            # 메모리 정리 (매 문제마다!)
-            if idx % 10 == 0:  # 10개마다 강제 정리
+            # 메모리 정리
+            if idx % 10 == 0:
                 gc.collect()
-                torch.cuda.empty_cache()
+                if INF_MODE == "huggingface":
+                    torch.cuda.empty_cache()
             
         except Exception as e:
             print(f"\n[오류] ID {problem_id}: {str(e)}")
