@@ -5,8 +5,7 @@ import pandas as pd
 import google.generativeai as genai
 from tqdm import tqdm
 
-GEMINI_API_KEY = "AIzaSyA7r4K6oTiq-LKdkVQU358R3TCjeyYzJDY"
-
+GEMINI_API_KEY = 
 INPUT_CSV = "data/train/train_augmented_concat.csv"
 OUTPUT_CSV = "data/train/train_cot_test_all.csv"
 
