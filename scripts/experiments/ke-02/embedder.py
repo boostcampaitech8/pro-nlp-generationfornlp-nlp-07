@@ -72,18 +72,18 @@ class Embedder:
             # e5 모델의 instruction 포맷 적용 (passage: 접두사)
             formatted_texts = [f"passage: {text}" for text in texts]
             
+            # sentence-transformers의 encode()는 max_length, truncate 파라미터를 지원하지 않음
+            # 대신 청킹 단계에서 이미 400자로 제한했으므로 대부분 512 토큰을 넘지 않음
             embeddings = self.model.encode(
                 formatted_texts,
                 batch_size=self.batch_size,
                 show_progress_bar=show_progress_bar,
                 convert_to_numpy=True,
                 device=self.device,
-                max_length=self.max_length,
-                truncate=True,  # 자동 truncation 활성화
                 normalize_embeddings=normalize_embeddings
             )
             
-            logger.info(f"Generated embeddings for {len(texts)} texts, shape: {embeddings.shape}")
+            # logger.info(f"Generated embeddings for {len(texts)} texts, shape: {embeddings.shape}")
             return embeddings
             
         except RuntimeError as e:
