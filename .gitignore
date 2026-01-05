@@ -36,6 +36,12 @@ __pycache__/
 *.so
 .Python
 
+# FAISS 인덱스 및 메타데이터 (용량이 큼)
+scripts/experiments/ke-03/downloaded_faiss/
+
+# Unsloth 컴파일 캐시
+scripts/experiments/ke-03/unsloth_compiled_cache/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
