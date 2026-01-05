@@ -278,7 +278,7 @@ def main():
 
     parser.add_argument(
         '--base_dir',
-        default='/data/ephemeral/home/T8091/phk-04/submissions/T8091',
+        default='../../../submissions',
         help='기본 경로 (상대 경로 사용 시)'
     )
 
@@ -292,7 +292,7 @@ def main():
         file_path = Path(file)
 
         if not file_path.is_absolute():
-            file_path = base_dir / file
+            file_path = base_dir / f"{file}.json"
 
         full_paths.append(file_path)
 

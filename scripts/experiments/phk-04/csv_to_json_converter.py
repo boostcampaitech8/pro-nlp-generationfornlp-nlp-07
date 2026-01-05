@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 
-FILE_NAME = 'probs_NLP-07-ODQA_Qwen2.5-32B-Instruct-bnb-4bit_15.csv'
+FILE_NAME = 'probs_NLP-07-ODQA_Qwen3-32B-bnb-4bit-CoT_2.csv'
 
 # 1. 파일 읽기
 csv_df = pd.read_csv(FILE_NAME)
