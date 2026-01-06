@@ -6,6 +6,7 @@ Agentic RAG 핵심 로직
 """
 import os
 import gc
+import re
 import torch
 import json
 from typing import List, Dict, Any, Optional, Tuple
@@ -17,6 +18,14 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.tracers import LangChainTracer
 from pydantic import ConfigDict, Field
+
+# LangSmith SDK for custom tracing
+try:
+    from langsmith import Client, traceable
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    LANGSMITH_AVAILABLE = False
+    traceable = lambda *args, **kwargs: lambda func: func
 
 from sentence_transformers import SentenceTransformer
 from unsloth import FastLanguageModel
@@ -70,11 +79,20 @@ def setup_langsmith():
     try:
         tracer = LangChainTracer()
         callbacks = [tracer]
-        return tracer, callbacks
+        
+        # LangSmith Client 초기화 (커스텀 이벤트 로깅용)
+        client = None
+        if LANGSMITH_AVAILABLE:
+            try:
+                client = Client()
+            except Exception:
+                client = None
+        
+        return tracer, callbacks, client
     except Exception as e:
         print(f"⚠️ LangSmith 초기화 실패: {e}")
         print("   LangSmith 트래킹 없이 진행합니다.")
-        return None, None
+        return None, None, None
 
 
 # ========== FAISS Retriever (메모리 최적화) ==========
@@ -114,7 +132,6 @@ class FAISSRetriever(BaseRetriever):
         try:
             # 검색 수행
             # E5 instruct 모델의 올바른 prefix 형식 사용
-            #task_description = "Given a question about Korean CSAT problems, retrieve relevant passages from Korean Wikipedia that help answer the question"
             task_description = "한국 수능 문제의 질문에 답하기 위해 관련된 한국어 위키피디아 문서를 검색하세요"
             query_text = f"Instruct: {task_description}\nQuery: {query}"
             query_embedding = self.embedding_model.encode(
@@ -360,7 +377,7 @@ class QueryGenerator:
         prompt = f"""다음 지문과 질문을 읽고, 위키피디아에서 검색할 쿼리를 생성하세요.
 
 지문:
-{paragraph[:500]}  # 일부만 표시
+{paragraph}
 
 질문:
 {question}
@@ -370,6 +387,38 @@ class QueryGenerator:
 {previous_info}
 
 위키피디아에서 검색할 키워드나 질문을 한 문장으로 작성하세요.
+검색 쿼리만 답하세요 (설명 없이)."""
+        
+        query = self.llm.generate(prompt, max_new_tokens=50)
+        return query.strip()
+    
+    def generate_query_for_choice(
+        self,
+        paragraph: str,
+        question: str,
+        choice: str,
+        choice_num: int,
+        previous_queries: Optional[List[str]] = None,
+        callbacks: Optional[List] = None
+    ) -> str:
+        """특정 선택지에 대한 검색 쿼리 생성"""
+        previous_info = ""
+        if previous_queries:
+            previous_info = f"\n\n이전 검색 쿼리:\n{chr(10).join([f'- {q}' for q in previous_queries])}\n\n위 쿼리로 충분한 정보를 얻지 못했습니다. 다른 관점에서 쿼리를 생성하세요."
+        
+        prompt = f"""다음 지문과 질문, 그리고 특정 선택지를 읽고, 이 선택지가 참인지 거짓인지 판단하기 위해 필요한 위키피디아 검색 쿼리를 생성하세요.
+
+지문:
+{paragraph}
+
+질문:
+{question}
+
+선택지 {choice_num}: {choice}
+{previous_info}
+
+위키피디아에서 검색할 키워드나 질문을 한 문장으로 작성하세요.
+이 선택지의 핵심 개념이나 주장을 검증하기 위한 검색 쿼리를 생성하세요.
 검색 쿼리만 답하세요 (설명 없이)."""
         
         query = self.llm.generate(prompt, max_new_tokens=50)
@@ -435,7 +484,7 @@ class IntegratedReasoner:
 참고 자료를 활용할 때는 다음을 유념하세요:
 1. 원래 지문이 최우선 판단 기준입니다. 참고 자료는 지문의 맥락을 이해하거나 불분명한 개념을 보충하는 용도로만 사용하세요.
 2. 참고 자료와 지문 내용이 충돌하면 반드시 지문을 따르세요.
-3. 수능/KMMLU/KLUE MRC 문제는 지문 기반 추론이 핵심입니다. 선택지 판단 시 지문의 논리 흐름과 근거를 우선 분석하고, 참고 자료는 보조적으로만 활용하세요.
+3. 해당 문제는 지문 기반 추론이 핵심입니다. 선택지 판단 시 지문의 논리 흐름과 근거를 우선 분석하고, 참고 자료는 보조적으로만 활용하세요.
 4. 각 선택지가 지문 및 참고 자료의 근거에 부합하는지 하나씩 검토한 뒤, 가장 타당한 하나만 고르세요.
 
 참고 자료:
@@ -467,6 +516,105 @@ class IntegratedReasoner:
         }
 
 
+# ========== 선택지별 개별 판단 ==========
+
+class ChoiceEvaluator:
+    """각 선택지별 개별 판단"""
+    
+    def __init__(self, llm: MultipleChoiceLLM):
+        self.llm = llm
+    
+    def evaluate_choice(
+        self,
+        paragraph: str,
+        question: str,
+        choice: str,
+        choice_num: int,
+        choice_docs: List[Document],
+        callbacks: Optional[List] = None
+    ) -> Dict[str, Any]:
+        """
+        선택지 개별 판단
+        
+        Returns:
+            {
+                'choice_num': "1",
+                'judgment': "correct" | "incorrect" | "ambiguous",
+                'confidence': 0.0 ~ 1.0,
+                'reasoning': "판단 근거"
+            }
+        """
+        # 검색 결과 포맷팅
+        rag_context = "\n\n".join([
+            f"[{i+1}] {doc.metadata.get('title', 'N/A')}\n{doc.page_content[:500]}"
+            for i, doc in enumerate(choice_docs)
+        ])
+        
+        prompt = f"""지문과 질문, 그리고 특정 선택지를 읽고, 이 선택지가 지문과 질문에 부합하는지 판단하세요.
+
+지문:
+{paragraph}
+
+질문:
+{question}
+
+선택지 {choice_num}: {choice}
+
+검색된 참고 자료:
+{rag_context if rag_context else "참고 자료 없음"}
+
+판단 기준:
+1. 지문의 내용과 논리적 흐름을 우선 고려하세요
+2. 참고 자료는 보조적으로만 활용하세요
+3. 지문과 참고 자료가 충돌하면 반드시 지문을 따르세요
+
+이 선택지가 지문과 질문에 부합하는지 판단하세요.
+- 판단: "맞음", "틀림", "애매함" 중 하나로 답하세요
+- 신뢰도: 0.0 ~ 1.0 사이의 숫자로 답하세요 (맞음이면 높은 값, 틀림이면 낮은 값, 애매함이면 중간 값)
+
+답변 형식:
+판단: [맞음/틀림/애매함]
+신뢰도: [0.0~1.0]"""
+        
+        response = self.llm.generate(prompt, max_new_tokens=200)
+        
+        # 응답 파싱
+        judgment = "ambiguous"
+        confidence = 0.5
+        
+        if "맞음" in response or "correct" in response.lower() or "참" in response:
+            judgment = "correct"
+        elif "틀림" in response or "incorrect" in response.lower() or "거짓" in response:
+            judgment = "incorrect"
+        else:
+            judgment = "ambiguous"
+        
+        # 신뢰도 추출
+        confidence_match = re.search(r'신뢰도[:\s]*([0-9.]+)', response)
+        if confidence_match:
+            try:
+                confidence = float(confidence_match.group(1))
+                # 0.0~1.0 범위로 정규화
+                confidence = max(0.0, min(1.0, confidence))
+            except:
+                pass
+        else:
+            # 판단 결과에 따라 기본 신뢰도 설정
+            if judgment == "correct":
+                confidence = 0.8
+            elif judgment == "incorrect":
+                confidence = 0.2
+            else:
+                confidence = 0.5
+        
+        return {
+            'choice_num': str(choice_num),
+            'judgment': judgment,
+            'confidence': confidence,
+            'reasoning': response
+        }
+
+
 # ========== 선택지 검증 ==========
 
 class ChoiceValidator:
@@ -491,6 +639,95 @@ class ChoiceValidator:
         }
 
 
+# ========== 애매한 선택지 최종 판단 ==========
+
+class FinalReasoner:
+    """애매한 선택지들만 최종 판단"""
+    
+    def __init__(self, llm: MultipleChoiceLLM):
+        self.llm = llm
+    
+    def reason_ambiguous_choices(
+        self,
+        paragraph: str,
+        question: str,
+        ambiguous_choices: Dict[str, Dict[str, Any]],
+        callbacks: Optional[List] = None
+    ) -> Dict[str, Any]:
+        """
+        애매한 선택지들만 비교하여 최종 판단
+        
+        ambiguous_choices 구조:
+        {
+            "1": {
+                "choice": "선택지 텍스트",
+                "docs": [Document, ...],
+                "evaluation": {...},  # 1단계 판단 결과
+                ...
+            },
+            "3": {...},
+            ...
+        }
+        """
+        # 애매한 선택지별 정보 포맷팅
+        ambiguous_sections = []
+        choice_nums = []
+        
+        for choice_num, choice_info in ambiguous_choices.items():
+            choice = choice_info.get('choice', '')
+            docs = choice_info.get('docs', [])
+            evaluation = choice_info.get('evaluation', {})
+            confidence = evaluation.get('confidence', 0.5)
+            
+            choice_nums.append(choice_num)
+            
+            # 검색 결과 포맷팅
+            rag_context = "\n\n".join([
+                f"{i+1}. [{doc.metadata.get('title', 'N/A')}]\n{doc.page_content[:400]}"
+                for i, doc in enumerate(docs)
+            ])
+            
+            section = f"""[선택지 {choice_num}] {choice}
+
+1단계 판단: 애매함 (신뢰도: {confidence:.2f})
+
+검색된 참고 자료:
+{rag_context if rag_context else "참고 자료 없음"}"""
+            
+            ambiguous_sections.append(section)
+        
+        ambiguous_text = "\n\n---\n\n".join(ambiguous_sections)
+        
+        prompt = f"""지문과 질문을 읽고, 애매한 선택지들을 비교하여 가장 부합하는 하나를 선택하세요.
+
+지문:
+{paragraph}
+
+질문:
+{question}
+
+애매한 선택지들 (비교 판단 필요):
+
+{ambiguous_text}
+
+위 애매한 선택지들을 비교하여 지문과 질문에 가장 부합하는 하나를 선택하세요.
+- 지문의 논리적 흐름과 근거를 우선 고려하세요
+- 각 선택지의 검색 결과를 보조적으로 활용하세요
+- 지문과 참고 자료가 충돌하면 반드시 지문을 따르세요
+
+{', '.join(choice_nums)} 중에 하나를 정답으로 고르세요.
+정답:"""
+        
+        result = self.llm.predict_choice(prompt, num_choices=len(ambiguous_choices))
+        
+        return {
+            'answer': result['answer'],
+            'confidence': result['confidence'],
+            'probs': result['probs'],
+            'reasoning': f'애매한 선택지 {len(ambiguous_choices)}개 중 최종 판단'
+        }
+
+
 # ========== Agentic RAG Chain ==========
 
 class AgenticRAGChain:
@@ -504,8 +741,11 @@ class AgenticRAGChain:
         search_filter: SearchResultFilter,
         integrated_reasoner: IntegratedReasoner,
         choice_validator: ChoiceValidator,
+        choice_evaluator: 'ChoiceEvaluator',
+        final_reasoner: 'FinalReasoner',
         llm: MultipleChoiceLLM,
-        tracer: Optional[LangChainTracer] = None
+        tracer: Optional[LangChainTracer] = None,
+        langsmith_client: Optional[Any] = None
     ):
         self.paragraph_analyzer = paragraph_analyzer
         self.query_generator = query_generator
@@ -513,8 +753,11 @@ class AgenticRAGChain:
         self.search_filter = search_filter
         self.integrated_reasoner = integrated_reasoner
         self.choice_validator = choice_validator
+        self.choice_evaluator = choice_evaluator
+        self.final_reasoner = final_reasoner
         self.llm = llm
         self.tracer = tracer
+        self.langsmith_client = langsmith_client
     
     def solve(
         self,
@@ -522,23 +765,56 @@ class AgenticRAGChain:
         question: str,
         choices: List[str],
         callbacks: Optional[List] = None,
-        max_search_iterations: int = 3
+        max_search_iterations: int = 3,
+        problem_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """전체 워크플로우 실행"""
+        """전체 워크플로우 실행 (선택지별 RAG + 2단계 판단)"""
         # 메모리 사용량 로깅
         mem_before = get_memory_usage()
         if mem_before:
             print(f"[메모리] 시작: {mem_before['allocated']:.2f}GB")
         
-        # LangSmith 트래킹 (간단한 로깅으로 대체)
-        # 실제 LangSmith 통합은 LangChain의 자동 트래킹에 의존
-        workflow_run = None
+        # LangSmith 커스텀 트래킹을 위한 run 생성
+        langsmith_run = None
+        if self.langsmith_client and LANGSMITH_AVAILABLE:
+            try:
+                import uuid
+                from datetime import datetime
+                langsmith_run = self.langsmith_client.create_run(
+                    name=f"agentic_rag_solve_{problem_id or 'unknown'}",
+                    run_type="chain",
+                    inputs={
+                        "problem_id": problem_id or "unknown",
+                        "question": question[:200],  # 처음 200자만
+                        "num_choices": len(choices)
+                    },
+                    project_name=os.getenv("LANGCHAIN_PROJECT", "default"),
+                    start_time=datetime.now()
+                )
+            except Exception as e:
+                print(f"⚠️ LangSmith run 생성 실패: {e}")
+                langsmith_run = None
         
         try:
             # 1단계: 지문 분석
             analysis = self.paragraph_analyzer.analyze(
                 paragraph, question, choices, callbacks=callbacks
             )
+            
+            # LangSmith: 지문 분석 결과 로깅
+            if langsmith_run:
+                try:
+                    self.langsmith_client.update_run(
+                        run_id=langsmith_run.id,
+                        extra={
+                            "paragraph_analysis": {
+                                "can_answer_without_search": analysis['can_answer_without_search'],
+                                "reasoning": analysis.get('reasoning', '')[:500]
+                            }
+                        }
+                    )
+                except:
+                    pass
             
             cleanup_memory()  # 지문 분석 후 정리
             
@@ -549,30 +825,67 @@ class AgenticRAGChain:
                     num_choices=len(choices)
                 )
                 
+                # LangSmith: 지문만으로 답한 경우 로깅
+                if langsmith_run:
+                    try:
+                        from datetime import datetime
+                        self.langsmith_client.update_run(
+                            run_id=langsmith_run.id,
+                            outputs={
+                                "answer": result.get('answer'),
+                                "confidence": result.get('confidence'),
+                                "probs": result.get('probs', {}),
+                                "method": "direct_answer"
+                            },
+                            end_time=datetime.now()
+                        )
+                    except:
+                        pass
+                
                 cleanup_memory()
                 return result
             
-            # 2단계: 검색 필요
-            search_results = []
-            iteration = 0
+            # 2단계: 선택지별 RAG 및 개별 판단
+            choice_results = {}  # {"1": {query, docs, evaluation}, ...}
+            correct_choices = []  # 명확히 맞는 선택지들
+            incorrect_choices = []  # 명확히 틀린 선택지들
+            ambiguous_choices = {}  # 애매한 선택지들
             
-            while iteration < max_search_iterations:
-                # 검색 쿼리 생성
-                query = self.query_generator.generate_query(
-                    paragraph, question, choices,
-                    previous_queries=[q for q, _ in search_results],
+            print(f"\n[선택지별 RAG 시작] 총 {len(choices)}개 선택지")
+            
+            # LangSmith: RAG 시작 로깅
+            if langsmith_run:
+                try:
+                    self.langsmith_client.update_run(
+                        run_id=langsmith_run.id,
+                        extra={
+                            "rag_started": {
+                                "num_choices": len(choices)
+                            }
+                        }
+                    )
+                except:
+                    pass
+            
+            for i, choice in enumerate(choices):
+                choice_num = str(i + 1)
+                print(f"\n[선택지 {choice_num}] 처리 중...")
+                
+                # 2-1. 선택지별 쿼리 생성
+                query = self.query_generator.generate_query_for_choice(
+                    paragraph, question, choice, choice_num,
+                    previous_queries=None,
                     callbacks=callbacks
                 )
                 
                 cleanup_memory()  # 쿼리 생성 후 정리
                 
-                # FAISS 검색
-                # invoke 메서드를 사용하면 LangChain이 자동으로 run_manager 생성
+                # 2-2. 선택지별 검색
                 docs = self.retriever.invoke(query)
                 
                 cleanup_memory()  # 검색 후 정리
                 
-                # 필터링 및 리랭킹
+                # 2-3. 필터링 및 리랭킹
                 filtered_docs = self.search_filter.filter_and_rerank(
                     docs, query, top_k=5, callbacks=callbacks
                 )
@@ -581,29 +894,157 @@ class AgenticRAGChain:
                 del docs
                 cleanup_memory()  # 필터링 후 정리
                 
-                search_results.append((query, filtered_docs))
-                
-                # 3단계: 통합 추론
-                reasoning = self.integrated_reasoner.reason(
-                    paragraph, question, choices, filtered_docs, callbacks=callbacks
+                # 2-4. 선택지별 개별 판단
+                evaluation = self.choice_evaluator.evaluate_choice(
+                    paragraph, question, choice, choice_num,
+                    filtered_docs, callbacks=callbacks
                 )
                 
-                cleanup_memory()  # 추론 후 정리
+                cleanup_memory()  # 판단 후 정리
                 
-                # 검증: 모든 선택지가 충분히 검증되었는가?
-                validation = self.choice_validator.validate_all_choices(
-                    reasoning, callbacks=callbacks
-                )
+                # 결과 저장
+                choice_results[choice_num] = {
+                    'choice': choice,
+                    'query': query,
+                    'docs': filtered_docs,
+                    'evaluation': evaluation
+                }
                 
-                cleanup_memory()  # 검증 후 정리
+                # LangSmith: 각 선택지별 RAG 결과 로깅
+                if langsmith_run:
+                    try:
+                        # 검색된 문서 정보 추출
+                        doc_info = []
+                        for doc in filtered_docs:
+                            doc_info.append({
+                                "title": doc.metadata.get('title', 'N/A'),
+                                "content_preview": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
+                            })
+                        
+                        # extra에 선택지별 정보 추가
+                        current_extra = langsmith_run.extra or {}
+                        if "choice_rag_results" not in current_extra:
+                            current_extra["choice_rag_results"] = {}
+                        
+                        current_extra["choice_rag_results"][choice_num] = {
+                            "choice": choice,
+                            "query": query,
+                            "num_docs": len(filtered_docs),
+                            "documents": doc_info,
+                            "judgment": evaluation.get('judgment'),
+                            "confidence": evaluation.get('confidence'),
+                            "reasoning": evaluation.get('reasoning', '')[:500]  # 처음 500자만
+                        }
+                        
+                        self.langsmith_client.update_run(
+                            run_id=langsmith_run.id,
+                            extra=current_extra
+                        )
+                    except Exception as e:
+                        print(f"⚠️ LangSmith 로깅 실패 (선택지 {choice_num}): {e}")
                 
-                if validation['all_validated']:
-                    break
+                # 판단 결과에 따라 분류
+                judgment = evaluation.get('judgment', 'ambiguous')
+                confidence = evaluation.get('confidence', 0.5)
                 
-                iteration += 1
+                if judgment == "correct" and confidence >= 0.8:
+                    correct_choices.append(choice_num)
+                    print(f"  → 명확히 맞음 (신뢰도: {confidence:.2f})")
+                elif judgment == "incorrect" and confidence <= 0.2:
+                    incorrect_choices.append(choice_num)
+                    print(f"  → 명확히 틀림 (신뢰도: {confidence:.2f})")
+                else:
+                    ambiguous_choices[choice_num] = choice_results[choice_num]
+                    print(f"  → 애매함 (신뢰도: {confidence:.2f})")
             
-            # 최종 답변
-            final_result = reasoning
+            cleanup_memory()  # 모든 선택지 처리 후 정리
+            
+            # 3단계: 최종 판단
+            print(f"\n[최종 판단]")
+            print(f"  명확히 맞음: {len(correct_choices)}개 {correct_choices}")
+            print(f"  명확히 틀림: {len(incorrect_choices)}개 {incorrect_choices}")
+            print(f"  애매함: {len(ambiguous_choices)}개 {list(ambiguous_choices.keys())}")
+            
+            # LangSmith: 판단 분류 결과 로깅
+            if langsmith_run:
+                try:
+                    current_extra = langsmith_run.extra or {}
+                    current_extra["judgment_classification"] = {
+                        "correct_choices": correct_choices,
+                        "incorrect_choices": incorrect_choices,
+                        "ambiguous_choices": list(ambiguous_choices.keys())
+                    }
+                    self.langsmith_client.update_run(
+                        run_id=langsmith_run.id,
+                        extra=current_extra
+                    )
+                except:
+                    pass
+            
+            if len(correct_choices) == 1:
+                # 명확히 맞는 선택지가 1개면 그것이 정답
+                final_answer = correct_choices[0]
+                result = {
+                    'answer': final_answer,
+                    'confidence': choice_results[final_answer]['evaluation']['confidence'],
+                    'probs': {final_answer: 1.0},
+                    'reasoning': f'명확히 맞는 선택지: {final_answer}'
+                }
+            elif len(correct_choices) > 1:
+                # 명확히 맞는 선택지가 여러 개면 애매한 선택지로 취급하여 최종 판단
+                print(f"  → 명확히 맞는 선택지가 여러 개이므로 최종 판단 필요")
+                for choice_num in correct_choices:
+                    ambiguous_choices[choice_num] = choice_results[choice_num]
+                final_result = self.final_reasoner.reason_ambiguous_choices(
+                    paragraph, question, ambiguous_choices, callbacks=callbacks
+                )
+                result = final_result
+            elif len(ambiguous_choices) > 0:
+                # 애매한 선택지들만 최종 판단
+                final_result = self.final_reasoner.reason_ambiguous_choices(
+                    paragraph, question, ambiguous_choices, callbacks=callbacks
+                )
+                result = final_result
+            else:
+                # 모든 선택지가 명확히 틀림 (이상한 경우)
+                # 가장 덜 틀린 선택지를 선택
+                min_incorrect_confidence = 1.0
+                best_choice = None
+                for choice_num in incorrect_choices:
+                    conf = choice_results[choice_num]['evaluation']['confidence']
+                    if conf < min_incorrect_confidence:
+                        min_incorrect_confidence = conf
+                        best_choice = choice_num
+                
+                result = {
+                    'answer': best_choice if best_choice else "1",
+                    'confidence': 1.0 - min_incorrect_confidence,
+                    'probs': {best_choice: 1.0 - min_incorrect_confidence} if best_choice else {},
+                    'reasoning': '모든 선택지가 명확히 틀림으로 판단됨'
+                }
+            
+            # LangSmith: 최종 판단 결과 로깅 및 run 종료
+            if langsmith_run:
+                try:
+                    from datetime import datetime
+                    judgment_type = ("single_correct" if len(correct_choices) == 1 else 
+                                    "multiple_correct" if len(correct_choices) > 1 else
+                                    "ambiguous" if len(ambiguous_choices) > 0 else
+                                    "all_incorrect")
+                    
+                    self.langsmith_client.update_run(
+                        run_id=langsmith_run.id,
+                        outputs={
+                            "answer": result.get('answer'),
+                            "confidence": result.get('confidence'),
+                            "probs": result.get('probs', {}),
+                            "reasoning": result.get('reasoning', ''),
+                            "judgment_type": judgment_type
+                        },
+                        end_time=datetime.now()
+                    )
+                except Exception as e:
+                    print(f"⚠️ LangSmith 최종 판단 로깅 실패: {e}")
             
             cleanup_memory()  # 최종 답변 생성 후 정리
             
@@ -612,7 +1053,7 @@ class AgenticRAGChain:
             if mem_after:
                 print(f"[메모리] 종료: {mem_after['allocated']:.2f}GB")
             
-            return final_result
+            return result
             
         except Exception as e:
             print(f"[오류] Agentic RAG 실행 중 오류 발생: {e}")
@@ -628,13 +1069,13 @@ def build_agentic_qa_system(
     enable_tracing: bool = True,
     use_mmap: bool = True
 ) -> Dict[str, Any]:
-    """Agentic QA 시스템 구축"""
+    """Agentic QA 시스템 구축 (선택지별 RAG + 2단계 판단)"""
     print("=" * 60)
-    print("Agentic RAG 시스템 구축 시작")
+    print("Agentic RAG 시스템 구축 시작 (선택지별 RAG + 2단계 판단)")
     print("=" * 60)
     
     # 1. FAISS 인덱스 로드 (mmap 사용)
-    print("\n[1/5] FAISS 인덱스 로딩...")
+    print("\n[1/6] FAISS 인덱스 로딩...")
     index, metadata_list, embedding_model = load_hf_faiss_index(
         repo_id=faiss_repo_id,
         local_dir=local_faiss_dir,
@@ -643,7 +1084,7 @@ def build_agentic_qa_system(
     cleanup_memory()
     
     # 2. LLM 모델 로드
-    print("\n[2/5] LLM 모델 로딩...")
+    print("\n[2/6] LLM 모델 로딩...")
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=model_name,
         max_seq_length=4096,
@@ -662,23 +1103,25 @@ def build_agentic_qa_system(
     cleanup_memory()
     
     # 3. LangSmith 설정
-    print("\n[3/5] LangSmith 설정...")
+    print("\n[3/6] LangSmith 설정...")
     if enable_tracing:
-        tracer, callbacks = setup_langsmith()
+        tracer, callbacks, langsmith_client = setup_langsmith()
     else:
-        tracer, callbacks = None, None
+        tracer, callbacks, langsmith_client = None, None, None
     
     # 4. 컴포넌트 초기화
-    print("\n[4/5] 컴포넌트 초기화...")
+    print("\n[4/6] 컴포넌트 초기화...")
     retriever = FAISSRetriever(index, metadata_list, embedding_model)
     paragraph_analyzer = ParagraphAnalyzer(llm)
     query_generator = QueryGenerator(llm)
     search_filter = SearchResultFilter()
     integrated_reasoner = IntegratedReasoner(llm)
     choice_validator = ChoiceValidator()
+    choice_evaluator = ChoiceEvaluator(llm)
+    final_reasoner = FinalReasoner(llm)
     
     # 5. Agentic RAG Chain 구축
-    print("\n[5/5] Agentic RAG Chain 구축...")
+    print("\n[5/6] Agentic RAG Chain 구축...")
     agentic_chain = AgenticRAGChain(
         paragraph_analyzer=paragraph_analyzer,
         query_generator=query_generator,
@@ -686,8 +1129,11 @@ def build_agentic_qa_system(
         search_filter=search_filter,
         integrated_reasoner=integrated_reasoner,
         choice_validator=choice_validator,
+        choice_evaluator=choice_evaluator,
+        final_reasoner=final_reasoner,
         llm=llm,
-        tracer=tracer
+        tracer=tracer,
+        langsmith_client=langsmith_client
     )
     
     print("\n✅ Agentic RAG 시스템 구축 완료!")
