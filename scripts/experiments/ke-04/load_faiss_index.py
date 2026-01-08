@@ -109,4 +109,3 @@ if __name__ == "__main__":
             print(f"[{i+1}] 거리: {dist:.4f}")
             print(f"제목: {res.get('title', 'N/A')}")
             print(f"내용: {res.get('page_content', '')[:150]}...\n")
-

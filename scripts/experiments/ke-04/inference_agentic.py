@@ -146,7 +146,8 @@ for idx, row in tqdm(enumerate(test_dataset), total=len(test_dataset), desc="추
             question=question,
             choices=choices,
             callbacks=callbacks,
-            max_search_iterations=args.max_search_iterations
+            max_search_iterations=args.max_search_iterations,
+            problem_id=problem_id
         )
         
         # 결과 저장
@@ -160,7 +161,9 @@ for idx, row in tqdm(enumerate(test_dataset), total=len(test_dataset), desc="추
             'prediction': str(result['answer']),
             'probabilities': result.get('probs', {}),
             'confidence': result.get('confidence', 0.0),
-            'num_choices': len(choices)
+            'num_choices': len(choices),
+            'method': result.get('method', 'rag_with_choice_evaluation'),
+            'choice_evaluations': result.get('choice_evaluations', None)
         })
         
         # 첫 문제 상세 정보 출력
