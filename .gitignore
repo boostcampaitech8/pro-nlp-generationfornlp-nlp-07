@@ -1,0 +1,60 @@
+.venv/*
+code.tar.gz
+data.tar.gz
+data/*
+data/**/*
+# .gitkeep 파일은 유지
+!data/
+!data/**/
+!data/**/.gitkeep
+
+# Baseline notebook (Git에 포함 금지)
+baseline_code.ipynb
+
+# Data files (루트의 data/ 폴더만 무시, src/data/는 포함)
+*.csv
+
+# Model checkpoints and outputs (루트의 models/ 폴더만 무시, src/models/는 포함)
+/models/
+outputs/*
+outputs/**/*
+# .gitkeep 파일은 유지
+!outputs/
+!outputs/**/
+!outputs/**/.gitkeep
+submissions/*
+submissions/**/*
+!submissions/.gitkeep
+*.pt
+*.pth
+*.ckpt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Environment variables (민감한 정보)
+.env
+
+# Archives
+*.tar.gz
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+outputs_gemma/
