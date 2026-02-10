@@ -22,13 +22,7 @@ def preprocess_logits_for_metrics(logits, labels, tokenizer: PreTrainedTokenizer
     logits = logits if not isinstance(logits, tuple) else logits[0]
     
     # Get indices for answer tokens (1, 2, 3, 4, 5)
-    logit_idx = [
-        tokenizer.vocab.get("1", tokenizer.vocab.get("1", 0)),
-        tokenizer.vocab.get("2", tokenizer.vocab.get("2", 0)),
-        tokenizer.vocab.get("3", tokenizer.vocab.get("3", 0)),
-        tokenizer.vocab.get("4", tokenizer.vocab.get("4", 0)),
-        tokenizer.vocab.get("5", tokenizer.vocab.get("5", 0)),
-    ]
+    logit_idx = [tokenizer.convert_tokens_to_ids(str(i)) for i in range(1, 6)]
     
     # -2: answer token, -1: eos token
     logits = logits[:, -2, logit_idx]

@@ -1,0 +1,5 @@
+nohup: ignoring input
+  File "/data/ephemeral/home/pro-nlp-generationfornlp-nlp-07/scripts/experiments/lhs-27/inference_logit_sc_rag_gate.py", line 295
+    _tok_re = re\.compile\(r\"\[가-힣A-Za-z0-9\]\+\"\)
+                 ^
+SyntaxError: unexpected character after line continuation character

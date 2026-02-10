@@ -6,6 +6,7 @@ from tqdm import tqdm
 from typing import List, Dict, Any
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from src.config.config import PRED_CHOICES_MAP
+from src.models.chat_template import setup_chat_template
 
 
 def predict(
@@ -29,6 +30,8 @@ def predict(
         Predicted answer (1-5)
     """
     model.eval()
+    
+    setup_chat_template(tokenizer)
     
     with torch.inference_mode():
         # Apply chat template
@@ -87,10 +90,12 @@ def predict_batch(
     model.eval()
     infer_results = []
     
+    setup_chat_template(tokenizer)
+    
     iterator = tqdm(test_dataset) if show_progress else test_dataset
     
     with torch.inference_mode():
-        for data in iterator:
+        for i, data in enumerate(iterator):
             _id = data["id"]
             messages = data["messages"]
             len_choices = data["len_choices"]
@@ -103,6 +108,14 @@ def predict_batch(
                 return_tensors="pt",
             ).to(device)
             
+            # Debug: Print input shape to check for huge samples
+            if i == 0:
+                print(f"Sample {i} input shape: {inputs.shape}")
+                # Debug: Check token IDs for 1-5
+                for val in range(1, 6):
+                    tid = tokenizer.encode(str(val), add_special_tokens=False)[-1]
+                    print(f"Debug: Token ID for '{val}': {tid}")
+            
             # Get model outputs
             outputs = model(inputs)
             
@@ -110,10 +123,20 @@ def predict_batch(
             logits = outputs.logits[:, -1].flatten().cpu()
             
             # Get logits for answer tokens (1, 2, 3, 4, 5)
-            target_logit_list = [
-                logits[tokenizer.vocab.get(str(i + 1), 0)]
-                for i in range(len_choices)
-            ]
+            # Use encode but handle potential leading space issues or special tokens
+            # Most tokenizers will have a specific ID for "1", "2", etc.
+            # We want the ID of the token that WOULD be generated next.
+            token_ids = []
+            for i in range(1, len_choices + 1):
+                # We try both with and without space if needed, 
+                # but usually apply_chat_template's add_generation_prompt leaves things ready for the bare digit.
+                tid = tokenizer.convert_tokens_to_ids(str(i))
+                if tid == tokenizer.unk_token_id:
+                    # Fallback if bare string isn't in vocab (unlikely for digits)
+                    tid = tokenizer.encode(str(i), add_special_tokens=False)[-1]
+                token_ids.append(tid)
+                
+            target_logit_list = [logits[tid] for tid in token_ids]
             
             # Apply softmax
             probs = torch.nn.functional.softmax(
@@ -121,11 +144,25 @@ def predict_batch(
                 dim=0
             ).detach().cpu().numpy()
             
+            if i == 0:
+                print(f"Debug: Logits for 1-5: {target_logit_list}")
+                print(f"Debug: Probs for 1-5: {probs}")
+            
             # Get prediction
             predict_idx = np.argmax(probs, axis=-1)
             predict_value = PRED_CHOICES_MAP[predict_idx]
             
-            infer_results.append({"id": _id, "answer": predict_value})
-    
+            infer_results.append({
+                "id": _id, 
+                "answer": predict_value,
+                "logits": [float(x) for x in target_logit_list],
+                "probs": [float(x) for x in probs]
+            })
+            
+            # Clean up memory
+            del inputs, outputs, logits, probs
+            if i % 10 == 0:
+                torch.cuda.empty_cache()
+                
     return infer_results
 

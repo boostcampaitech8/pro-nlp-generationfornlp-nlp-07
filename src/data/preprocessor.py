@@ -6,7 +6,9 @@ from datasets import Dataset
 
 
 # Prompt templates
-PROMPT_NO_QUESTION_PLUS = """지문:
+PROMPT_NO_QUESTION_PLUS = """지문을 읽고 질문의 답을 구하세요.
+
+지문:
 {paragraph}
 
 질문:
@@ -18,7 +20,9 @@ PROMPT_NO_QUESTION_PLUS = """지문:
 1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
 정답:"""
 
-PROMPT_QUESTION_PLUS = """지문:
+PROMPT_QUESTION_PLUS = """지문을 읽고 질문의 답을 구하세요.
+
+지문:
 {paragraph}
 
 질문:
@@ -32,8 +36,6 @@ PROMPT_QUESTION_PLUS = """지문:
 
 1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
 정답:"""
-
-SYSTEM_MESSAGE = "지문을 읽고 질문의 답을 구하세요."
 
 
 def create_prompt(
@@ -90,7 +92,7 @@ def prepare_training_data(df: pd.DataFrame) -> List[Dict[str, Any]]:
         
         # <보기>가 있을 때
         if row["question_plus"] and pd.notna(row["question_plus"]):
-            user_message = PROMPT_QUESTION_PLUS.format(
+            prompt = PROMPT_QUESTION_PLUS.format(
                 paragraph=row["paragraph"],
                 question=row["question"],
                 question_plus=row["question_plus"],
@@ -98,22 +100,29 @@ def prepare_training_data(df: pd.DataFrame) -> List[Dict[str, Any]]:
             )
         # <보기>가 없을 때
         else:
-            user_message = PROMPT_NO_QUESTION_PLUS.format(
+            prompt = PROMPT_NO_QUESTION_PLUS.format(
                 paragraph=row["paragraph"],
                 question=row["question"],
                 choices=choices_string,
             )
         
-        # chat message 형식으로 변환
+        # # chat message 형식으로 변환
+        # processed_dataset.append(
+        #     {
+        #         "id": row["id"],
+        #         "messages": [
+        #             {"role": "user", "content": user_message},
+        #             {"role": "assistant", "content": f"{row['answer']}"}
+        #         ],
+        #         "label": row["answer"],
+        #     }
+        # )
+        
+        # Prompt-completion 형식으로 변환
         processed_dataset.append(
             {
-                "id": row["id"],
-                "messages": [
-                    {"role": "system", "content": SYSTEM_MESSAGE},
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": f"{row['answer']}"}
-                ],
-                "label": row["answer"],
+                "prompt": prompt,
+                "completion": row["answer"],
             }
         )
     
@@ -152,14 +161,21 @@ def prepare_inference_data(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 choices=choices_string,
             )
         
+        # test_dataset.append(
+        #     {
+        #         "id": row["id"],
+        #         "messages": [
+        #             {"role": "user", "content": user_message},
+        #         ],
+        #         "len_choices": len_choices,
+        #     }
+        # )
+
+        # Prompt-completion 형식으로 변환
         test_dataset.append(
             {
-                "id": row["id"],
-                "messages": [
-                    {"role": "system", "content": SYSTEM_MESSAGE},
-                    {"role": "user", "content": user_message},
-                ],
-                "len_choices": len_choices,
+                "prompt": prompt,
+                "completion": row["answer"],
             }
         )
     

@@ -78,11 +78,6 @@ def upload_model_to_hf(
     # Create repository if it doesn't exist
     create_repo_if_not_exists(model_name)
     
-    # Load model and tokenizer from checkpoint
-    print(f"Loading model and tokenizer from {checkpoint_path}...")
-    model = AutoPeftModelForCausalLM.from_pretrained(str(checkpoint_path))
-    tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_path))
-    
     # Load best model info if exists (원본 checkpoint 정보)
     original_checkpoint = None
     best_model_info_path = checkpoint_path / "best_model_info.json"
@@ -137,15 +132,31 @@ tokenizer = AutoTokenizer.from_pretrained("{model_name}")
         readme_path = checkpoint_path / "README.md"
         readme_path.write_text(readme_content)
     
-    # Upload model and tokenizer to main branch using push_to_hub
-    print(f"Uploading model and tokenizer to main branch...")
-    model.push_to_hub(
-        repo_id=model_name,
-        private=False,
-    )
-    tokenizer.push_to_hub(
-        repo_id=model_name,
-    )
+    try:
+        # Load model and tokenizer from checkpoint
+        print(f"Loading model and tokenizer from {checkpoint_path}...")
+        model = AutoPeftModelForCausalLM.from_pretrained(str(checkpoint_path))
+        tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_path))
+
+        # Upload model and tokenizer to main branch using push_to_hub
+        print(f"Uploading model and tokenizer to main branch...")
+        model.push_to_hub(
+            repo_id=model_name,
+            private=False,
+        )
+        tokenizer.push_to_hub(
+            repo_id=model_name,
+        )
+    except Exception as e:
+        print(f"모델 업로드 실패, 폴더 업로드로 전환: {e}")
+        api = HfApi()
+        api.upload_folder(
+            repo_id=model_name,
+            folder_path=str(checkpoint_path),
+            repo_type="model",
+            revision="main",
+            commit_message=f"Upload {checkpoint_path.name} (fallback folder upload)",
+        )
     
     # Upload README if exists
     if (checkpoint_path / "README.md").exists():

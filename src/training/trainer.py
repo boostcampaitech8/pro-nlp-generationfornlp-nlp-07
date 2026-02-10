@@ -1,11 +1,12 @@
 """Training utilities"""
 
+from typing import Optional
+
 from pathlib import Path
 from trl import SFTTrainer, SFTConfig
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizer, EarlyStoppingCallback
 from datasets import Dataset
 from peft import LoraConfig
-from src.training.data_collator import get_data_collator
 from src.training.metrics import compute_metrics, preprocess_logits_for_metrics
 from src.training.callbacks import SaveBestModelCallback
 from src.config.config import (
@@ -31,8 +32,9 @@ def create_trainer(
     tokenizer: PreTrainedTokenizer,
     train_dataset: Dataset,
     eval_dataset: Dataset,
-    peft_config: LoraConfig,
+
     output_dir: str,
+    peft_config: Optional[LoraConfig] = None,
     learning_rate: float = None,
     num_train_epochs: int = None,
     per_device_train_batch_size: int = None,
@@ -42,7 +44,7 @@ def create_trainer(
     lr_scheduler_type: str = None,
     logging_steps: int = None,
     save_strategy: str = None,
-    evaluation_strategy: str = None,
+    eval_strategy: str = None,
     save_total_limit: int = None,
     save_only_model: bool = None,
     report_to: str = None,
@@ -68,7 +70,7 @@ def create_trainer(
         lr_scheduler_type: Learning rate scheduler type
         logging_steps: Logging steps
         save_strategy: Save strategy
-        evaluation_strategy: Evaluation strategy
+        eval_strategy: Evaluation strategy
         save_total_limit: Save total limit
         save_only_model: Save only model
         report_to: Report to (e.g., "wandb", "tensorboard", "none")
@@ -88,7 +90,7 @@ def create_trainer(
     lr_scheduler_type = lr_scheduler_type or LR_SCHEDULER_TYPE
     logging_steps = logging_steps or LOGGING_STEPS
     save_strategy = save_strategy or SAVE_STRATEGY
-    evaluation_strategy = evaluation_strategy or EVALUATION_STRATEGY
+    eval_strategy = eval_strategy or EVALUATION_STRATEGY
     save_total_limit = save_total_limit or SAVE_TOTAL_LIMIT
     save_only_model = save_only_model if save_only_model is not None else SAVE_ONLY_MODEL
     report_to = report_to or REPORT_TO
@@ -99,15 +101,18 @@ def create_trainer(
     tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = 'right'
     
-    # Create data collator
-    data_collator = get_data_collator(tokenizer, response_template)
     
-    # Create training config
+    # Set default values for kwargs if not provided
+    kwargs.setdefault("gradient_checkpointing", True)
+    kwargs.setdefault("load_best_model_at_end", True)
+    kwargs.setdefault("metric_for_best_model", "eval_loss")
+    kwargs.setdefault("greater_is_better", False)
+
     sft_config = SFTConfig(
         do_train=True,
         do_eval=True,
         lr_scheduler_type=lr_scheduler_type,
-        max_seq_length=max_seq_length,
+        max_length=max_seq_length, # trl==0.26.1은 max_seq_length가 max_length로 변경되었습니다.
         output_dir=str(output_dir),
         per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=per_device_eval_batch_size,
@@ -116,14 +121,12 @@ def create_trainer(
         weight_decay=weight_decay,
         logging_steps=logging_steps,
         save_strategy=save_strategy,
-        evaluation_strategy=evaluation_strategy,
+        eval_strategy=eval_strategy,
         save_total_limit=save_total_limit,
         save_only_model=save_only_model,
         report_to=report_to,
-        gradient_checkpointing=True,  # 메모리 절약을 위해 활성화
-        load_best_model_at_end=True,  # 학습 끝에 best model 로드
-        metric_for_best_model="eval_loss",  # eval_loss를 기준으로 best model 선택
-        greater_is_better=False,  # loss는 작을수록 좋음
+        completion_only_loss=True, #  prompt-completion 데이터셋용
+        # assistant_only_loss=True,  # Conversational 포맷(messages)에 최적화된 마스킹
         **kwargs
     )
     
@@ -143,13 +146,13 @@ def create_trainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=data_collator,
-        tokenizer=tokenizer,
+        # data_collator=None, # SFTConfig의 completion_only_loss=True를 통해 자동 처리
+        processing_class=tokenizer,
         compute_metrics=compute_metrics_func,
         preprocess_logits_for_metrics=preprocess_logits_func,
         peft_config=peft_config,
         args=sft_config,
-        callbacks=[SaveBestModelCallback(best_model_dir=best_model_dir)],  # Best model 저장 callback 추가
+        callbacks=[SaveBestModelCallback(best_model_dir=best_model_dir), EarlyStoppingCallback(early_stopping_patience=2)],  # Best model 저장 callback 추가
     )
     
     return trainer
