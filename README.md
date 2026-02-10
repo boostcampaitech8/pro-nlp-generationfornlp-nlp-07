@@ -19,11 +19,11 @@
 
 ### Public 7위
 
-![Public Leaderboard](docs\public.PNG)
+![Public Leaderboard](docs/public.PNG)
 
 ### Private 5위
 
-![Private Leaderboard](docs\private.PNG)
+![Private Leaderboard](docs/private.PNG)
 
 ## 🤝 팀원
 
@@ -40,7 +40,7 @@
 
 ---
 
-프로젝트 진행에  대한 자세한 내용은 [wrapup_report.pdf](docs\wrapup_report.pdf)를 통해 확인할 수 있습니다.
+프로젝트 진행에  대한 자세한 내용은 [wrapup_report.pdf](docs/wrapup_report.pdf)를 통해 확인할 수 있습니다.
 
 ## 프로젝트 구조
 
